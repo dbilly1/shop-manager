@@ -1,17 +1,28 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatCurrency } from "@/utils/format"
-import { toast } from "sonner"
-import { Receipt, Banknote, Pencil, Plus, Loader2 } from "lucide-react"
-import type { Expense, SessionContext } from "@/types"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatCurrency } from "@/utils/format";
+import { toast } from "sonner";
+import { Receipt, Banknote, Pencil, Plus, Loader2 } from "lucide-react";
+import type { Expense, SessionContext } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -24,7 +35,7 @@ const CATEGORIES = [
   "Packaging",
   "Cleaning",
   "Miscellaneous",
-] as const
+] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,8 +49,8 @@ function getCategoryColor(category: string): string {
     Packaging: "bg-teal-100 text-teal-800",
     Cleaning: "bg-green-100 text-green-800",
     Miscellaneous: "bg-slate-100 text-slate-700",
-  }
-  return map[category] ?? "bg-slate-100 text-slate-700"
+  };
+  return map[category] ?? "bg-slate-100 text-slate-700";
 }
 
 function formatExpenseDate(dateStr: string): string {
@@ -47,104 +58,109 @@ function formatExpenseDate(dateStr: string): string {
     day: "numeric",
     month: "short",
     year: "numeric",
-  })
+  });
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split("T")[0]
+  return new Date().toISOString().split("T")[0];
 }
 
 function isWithinLast30Days(dateStr: string): boolean {
-  const date = new Date(dateStr + "T00:00:00")
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - 30)
-  cutoff.setHours(0, 0, 0, 0)
-  return date >= cutoff
+  const date = new Date(dateStr + "T00:00:00");
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  cutoff.setHours(0, 0, 0, 0);
+  return date >= cutoff;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  expenses: Expense[]
-  currency: string
-  session: SessionContext
-  branches: { id: string; name: string }[]
+  expenses: Expense[];
+  currency: string;
+  session: SessionContext;
+  branches: { id: string; name: string }[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExpensesClient({ expenses: initialExpenses, currency, session, branches }: Props) {
-  const router = useRouter()
+export function ExpensesClient({
+  expenses: initialExpenses,
+  currency,
+  session,
+  branches,
+}: Props) {
+  const router = useRouter();
 
   // Resolved branch: fixed for branch-scoped users, selectable for shop-level users
   const [selectedBranchId, setSelectedBranchId] = useState(
-    session.branch_id ?? branches[0]?.id ?? ""
-  )
+    session.branch_id ?? branches[0]?.id ?? "",
+  );
 
   // ── local state ────────────────────────────────────────────────────────────
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // form fields
-  const [date, setDate] = useState(todayISO())
-  const [category, setCategory] = useState<string>("Miscellaneous")
-  const [description, setDescription] = useState("")
-  const [amount, setAmount] = useState("")
-  const [paidFromTill, setPaidFromTill] = useState(false)
+  const [date, setDate] = useState(todayISO());
+  const [category, setCategory] = useState<string>("Miscellaneous");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [paidFromTill, setPaidFromTill] = useState(false);
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
   function openAdd() {
-    setEditingExpense(null)
-    setDate(todayISO())
-    setCategory("Miscellaneous")
-    setDescription("")
-    setAmount("")
-    setPaidFromTill(false)
-    setDialogOpen(true)
+    setEditingExpense(null);
+    setDate(todayISO());
+    setCategory("Miscellaneous");
+    setDescription("");
+    setAmount("");
+    setPaidFromTill(false);
+    setDialogOpen(true);
   }
 
   function openEdit(expense: Expense) {
-    setEditingExpense(expense)
-    setDate(expense.expense_date)
-    setCategory(expense.category)
-    setDescription(expense.description ?? "")
-    setAmount(String(expense.amount))
-    setPaidFromTill(expense.payment_method === "cash")
-    setDialogOpen(true)
+    setEditingExpense(expense);
+    setDate(expense.expense_date);
+    setCategory(expense.category);
+    setDescription(expense.description ?? "");
+    setAmount(String(expense.amount));
+    setPaidFromTill(expense.payment_method === "cash");
+    setDialogOpen(true);
   }
 
   function closeDialog() {
-    setDialogOpen(false)
-    setEditingExpense(null)
+    setDialogOpen(false);
+    setEditingExpense(null);
   }
 
   // ── submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+    e.preventDefault();
 
-    const branchId = session.branch_id ?? selectedBranchId
+    const branchId = session.branch_id ?? selectedBranchId;
     if (!branchId) {
-      toast.error("Please select a branch")
-      return
+      toast.error("Please select a branch");
+      return;
     }
 
-    const parsedAmount = parseFloat(amount)
+    const parsedAmount = parseFloat(amount);
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      toast.error("Enter a valid amount")
-      return
+      toast.error("Enter a valid amount");
+      return;
     }
     if (!description.trim()) {
-      toast.error("Description is required")
-      return
+      toast.error("Description is required");
+      return;
     }
 
-    setLoading(true)
-    const supabase = createClient()
-    const payment_method: "cash" | "mobile" = paidFromTill ? "cash" : "mobile"
+    setLoading(true);
+    const supabase = createClient();
+    const payment_method: "cash" | "mobile" = paidFromTill ? "cash" : "mobile";
 
     if (editingExpense) {
       // ── edit ──
@@ -159,18 +175,20 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
         })
         .eq("id", editingExpense.id)
         .select()
-        .single()
+        .single();
 
       if (error) {
-        toast.error(error.message)
-        setLoading(false)
-        return
+        toast.error(error.message);
+        setLoading(false);
+        return;
       }
 
       setExpenses((prev) =>
-        prev.map((ex) => (ex.id === editingExpense.id ? (data as Expense) : ex))
-      )
-      toast.success("Expense updated")
+        prev.map((ex) =>
+          ex.id === editingExpense.id ? (data as Expense) : ex,
+        ),
+      );
+      toast.success("Expense updated");
     } else {
       // ── add ──
       const { data, error } = await supabase
@@ -187,35 +205,35 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
           recorded_by_name: session.full_name ?? null,
         })
         .select()
-        .single()
+        .single();
 
       if (error) {
-        toast.error(error.message)
-        setLoading(false)
-        return
+        toast.error(error.message);
+        setLoading(false);
+        return;
       }
 
-      setExpenses((prev) => [data as Expense, ...prev])
-      toast.success("Expense recorded")
+      setExpenses((prev) => [data as Expense, ...prev]);
+      toast.success("Expense recorded");
     }
 
-    closeDialog()
-    setLoading(false)
-    router.refresh()
+    closeDialog();
+    setLoading(false);
+    router.refresh();
   }
 
   // ── derived ────────────────────────────────────────────────────────────────
 
   const last30Total = expenses
     .filter((e) => isWithinLast30Days(e.expense_date))
-    .reduce((sum, e) => sum + e.amount, 0)
+    .reduce((sum, e) => sum + e.amount, 0);
 
   const byCategory = Object.entries(
     expenses.reduce<Record<string, number>>((acc, e) => {
-      acc[e.category] = (acc[e.category] ?? 0) + e.amount
-      return acc
-    }, {})
-  ).sort((a, b) => b[1] - a[1])
+      acc[e.category] = (acc[e.category] ?? 0) + e.amount;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
 
   // ── render ─────────────────────────────────────────────────────────────────
 
@@ -224,7 +242,7 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
       {/* ── Left sidebar ─────────────────────────────────────────────────────── */}
       <aside className="flex flex-col gap-4">
         {/* Last 30 days card */}
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded border p-4">
           <div className="flex items-center gap-2 mb-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100">
               <Receipt className="w-4 h-4 text-amber-600" />
@@ -237,14 +255,19 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
         </div>
 
         {/* By category card */}
-        <div className="bg-white rounded-lg border p-4 flex-1">
-          <p className="text-sm font-semibold text-slate-700 mb-3">By Category</p>
+        <div className="bg-white rounded border p-4 flex-1">
+          <p className="text-sm font-semibold text-slate-700 mb-3">
+            By Category
+          </p>
           {byCategory.length === 0 ? (
             <p className="text-xs text-slate-400">No expenses yet</p>
           ) : (
             <ul className="space-y-2">
               {byCategory.map(([cat, total]) => (
-                <li key={cat} className="flex items-center justify-between gap-2">
+                <li
+                  key={cat}
+                  className="flex items-center justify-between gap-2"
+                >
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(cat)}`}
                   >
@@ -267,7 +290,7 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
       </aside>
 
       {/* ── Right table ──────────────────────────────────────────────────────── */}
-      <main className="col-span-1 lg:col-span-3 bg-white rounded-lg border overflow-x-auto">
+      <main className="col-span-1 lg:col-span-3 bg-white rounded border overflow-x-auto">
         {/* Header */}
         <div className="px-5 py-4 border-b">
           <h2 className="text-base font-semibold text-slate-900">Expenses</h2>
@@ -293,7 +316,10 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
             </thead>
             <tbody className="divide-y divide-slate-100">
               {expenses.map((expense) => (
-                <tr key={expense.id} className="hover:bg-slate-50 transition-colors">
+                <tr
+                  key={expense.id}
+                  className="hover:bg-slate-50 transition-colors"
+                >
                   {/* Date */}
                   <td className="px-4 py-3 whitespace-nowrap text-slate-600">
                     {formatExpenseDate(expense.expense_date)}
@@ -310,7 +336,9 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
 
                   {/* Description */}
                   <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
-                    {expense.description ?? <span className="text-slate-300 italic">—</span>}
+                    {expense.description ?? (
+                      <span className="text-slate-300 italic">—</span>
+                    )}
                   </td>
 
                   {/* Amount */}
@@ -330,7 +358,8 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
 
                   {/* By */}
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {expense.recorded_by_name ?? expense.recorded_by.slice(0, 8)}
+                    {expense.recorded_by_name ??
+                      expense.recorded_by.slice(0, 8)}
                   </td>
 
                   {/* Actions */}
@@ -351,7 +380,12 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
       </main>
 
       {/* ── Add / Edit dialog ─────────────────────────────────────────────────── */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog() }}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDialog();
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
@@ -364,13 +398,18 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
             {!session.branch_id && branches.length > 0 && (
               <div className="space-y-1.5">
                 <Label>Branch</Label>
-                <Select value={selectedBranchId} onValueChange={(v) => setSelectedBranchId(v ?? "")}>
+                <Select
+                  value={selectedBranchId}
+                  onValueChange={(v) => setSelectedBranchId(v ?? "")}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
                     {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -393,7 +432,10 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
             {/* Category */}
             <div className="space-y-1.5">
               <Label htmlFor="expense-category">Category</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v ?? "Miscellaneous")}>
+              <Select
+                value={category}
+                onValueChange={(v) => setCategory(v ?? "Miscellaneous")}
+              >
                 <SelectTrigger id="expense-category" className="w-full">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -442,7 +484,9 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
                 checked={paidFromTill}
                 onChange={(e) => setPaidFromTill(e.target.checked)}
               />
-              <span className="text-sm text-slate-700">Paid from till (cash)</span>
+              <span className="text-sm text-slate-700">
+                Paid from till (cash)
+              </span>
             </label>
 
             {/* Submit */}
@@ -454,5 +498,5 @@ export function ExpensesClient({ expenses: initialExpenses, currency, session, b
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

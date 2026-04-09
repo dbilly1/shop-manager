@@ -1,27 +1,27 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { formatCurrency, formatDate } from "@/utils/format"
-import { toast } from "sonner"
+} from "@/components/ui/select";
+import { formatCurrency, formatDate } from "@/utils/format";
+import { toast } from "sonner";
 import {
   User,
   Phone,
@@ -34,60 +34,60 @@ import {
   TrendingDown,
   CheckCircle2,
   ArrowDownLeft,
-} from "lucide-react"
-import type { SessionContext } from "@/types"
+} from "lucide-react";
+import type { SessionContext } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface CreditSaleRow {
-  id: string
-  shop_id: string
-  branch_id: string
-  sale_id: string
-  customer_id: string
-  amount_owed: number
-  amount_paid: number
-  balance: number
-  created_at: string
-  customer: { id: string; name: string; phone: string | null } | null
-  sale: { sale_date: string } | null
+  id: string;
+  shop_id: string;
+  branch_id: string;
+  sale_id: string;
+  customer_id: string;
+  amount_owed: number;
+  amount_paid: number;
+  balance: number;
+  created_at: string;
+  customer: { id: string; name: string; phone: string | null } | null;
+  sale: { sale_date: string } | null;
 }
 
 interface CreditPayment {
-  id: string
-  customer_id: string
-  amount: number
-  payment_method: string
-  payment_date: string
-  notes: string | null
-  recorded_by: string | null
+  id: string;
+  customer_id: string;
+  amount: number;
+  payment_method: string;
+  payment_date: string;
+  notes: string | null;
+  recorded_by: string | null;
 }
 
 interface Props {
-  creditSales: CreditSaleRow[]
-  currency: string
-  overdueThreshold: number
-  session: SessionContext
+  creditSales: CreditSaleRow[];
+  currency: string;
+  overdueThreshold: number;
+  session: SessionContext;
 }
 
 // ─── Grouped customer shape ───────────────────────────────────────────────────
 
 interface CustomerGroup {
-  customerId: string
-  name: string
-  phone: string | null
-  totalOwed: number
-  totalPaid: number
-  outstanding: number
-  sales: CreditSaleRow[]
+  customerId: string;
+  name: string;
+  phone: string | null;
+  totalOwed: number;
+  totalPaid: number;
+  outstanding: number;
+  sales: CreditSaleRow[];
   /** branch_id from the first credit sale — used when session.branch_id is null */
-  branchId: string
+  branchId: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function todayIso(): string {
-  return new Date().toISOString().split("T")[0]
+  return new Date().toISOString().split("T")[0];
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -98,48 +98,48 @@ export function CreditClient({
   overdueThreshold,
   session,
 }: Props) {
-  const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
 
   // ── Selection state ──────────────────────────────────────────────────────
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     null,
-  )
+  );
 
   // ── Payment dialog ───────────────────────────────────────────────────────
-  const [payOpen, setPayOpen] = useState(false)
-  const [payAmount, setPayAmount] = useState("")
-  const [payMethod, setPayMethod] = useState<"cash" | "mobile_money">("cash")
-  const [payDate, setPayDate] = useState(todayIso())
-  const [payNotes, setPayNotes] = useState("")
-  const [payLoading, setPayLoading] = useState(false)
+  const [payOpen, setPayOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<"cash" | "mobile_money">("cash");
+  const [payDate, setPayDate] = useState(todayIso());
+  const [payNotes, setPayNotes] = useState("");
+  const [payLoading, setPayLoading] = useState(false);
 
   // ── Add customer dialog ──────────────────────────────────────────────────
-  const [addOpen, setAddOpen] = useState(false)
-  const [addName, setAddName] = useState("")
-  const [addPhone, setAddPhone] = useState("")
-  const [addLoading, setAddLoading] = useState(false)
+  const [addOpen, setAddOpen] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addPhone, setAddPhone] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
 
   // ── Edit customer dialog ─────────────────────────────────────────────────
-  const [editOpen, setEditOpen] = useState(false)
-  const [editName, setEditName] = useState("")
-  const [editPhone, setEditPhone] = useState("")
-  const [editLoading, setEditLoading] = useState(false)
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
 
   // ── Delete dialog ────────────────────────────────────────────────────────
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // ── Payment history ──────────────────────────────────────────────────────
-  const [payments, setPayments] = useState<CreditPayment[]>([])
-  const [paymentsLoading, setPaymentsLoading] = useState(false)
+  const [payments, setPayments] = useState<CreditPayment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   // ─── Group credit sales by customer ─────────────────────────────────────
   const customerGroups = useMemo<CustomerGroup[]>(() => {
-    const map = new Map<string, CustomerGroup>()
+    const map = new Map<string, CustomerGroup>();
 
     for (const row of creditSales) {
-      const cid = row.customer_id
+      const cid = row.customer_id;
       if (!map.has(cid)) {
         map.set(cid, {
           customerId: cid,
@@ -150,62 +150,65 @@ export function CreditClient({
           outstanding: 0,
           sales: [],
           branchId: row.branch_id,
-        })
+        });
       }
-      const g = map.get(cid)!
-      g.totalOwed += row.amount_owed
-      g.totalPaid += row.amount_paid
-      g.outstanding += row.balance
-      g.sales.push(row)
+      const g = map.get(cid)!;
+      g.totalOwed += row.amount_owed;
+      g.totalPaid += row.amount_paid;
+      g.outstanding += row.balance;
+      g.sales.push(row);
     }
 
-    return Array.from(map.values()).sort((a, b) => b.outstanding - a.outstanding)
-  }, [creditSales])
+    return Array.from(map.values()).sort(
+      (a, b) => b.outstanding - a.outstanding,
+    );
+  }, [creditSales]);
 
   const selectedGroup = useMemo(
-    () => customerGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
+    () =>
+      customerGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
     [customerGroups, selectedCustomerId],
-  )
+  );
 
   // ─── Load payment history whenever selection changes ─────────────────────
   const loadPayments = useCallback(
     async (customerId: string) => {
-      setPaymentsLoading(true)
+      setPaymentsLoading(true);
       const { data, error } = await supabase
         .from("credit_payments")
         .select("*")
         .eq("customer_id", customerId)
-        .order("payment_date", { ascending: false })
+        .order("payment_date", { ascending: false });
 
       if (error) {
-        toast.error("Failed to load payment history")
+        toast.error("Failed to load payment history");
       } else {
-        setPayments((data as CreditPayment[]) ?? [])
+        setPayments((data as CreditPayment[]) ?? []);
       }
-      setPaymentsLoading(false)
+      setPaymentsLoading(false);
     },
     [supabase],
-  )
+  );
 
   useEffect(() => {
     if (selectedCustomerId) {
-      loadPayments(selectedCustomerId)
+      loadPayments(selectedCustomerId);
     } else {
-      setPayments([])
+      setPayments([]);
     }
-  }, [selectedCustomerId, loadPayments])
+  }, [selectedCustomerId, loadPayments]);
 
   // ─── Record payment ───────────────────────────────────────────────────────
   async function handleRecordPayment() {
-    if (!selectedGroup) return
-    const amount = parseFloat(payAmount)
+    if (!selectedGroup) return;
+    const amount = parseFloat(payAmount);
     if (!amount || amount <= 0) {
-      toast.error("Enter a valid amount")
-      return
+      toast.error("Enter a valid amount");
+      return;
     }
 
-    setPayLoading(true)
-    const branchId = session.branch_id ?? selectedGroup.branchId
+    setPayLoading(true);
+    const branchId = session.branch_id ?? selectedGroup.branchId;
 
     const { error } = await supabase.from("credit_payments").insert({
       shop_id: session.shop_id,
@@ -215,95 +218,95 @@ export function CreditClient({
       payment_method: payMethod,
       payment_date: payDate,
       recorded_by: session.user_id,
-    })
+    });
 
     if (error) {
-      toast.error(error.message)
-      setPayLoading(false)
-      return
+      toast.error(error.message);
+      setPayLoading(false);
+      return;
     }
 
     // Reduce balances oldest-first
-    let remaining = amount
+    let remaining = amount;
     const sortedSales = [...selectedGroup.sales].sort(
       (a, b) =>
         new Date(a.sale?.sale_date ?? a.created_at).getTime() -
         new Date(b.sale?.sale_date ?? b.created_at).getTime(),
-    )
+    );
 
     for (const sale of sortedSales) {
-      if (remaining <= 0) break
-      if (sale.balance <= 0) continue
-      const deduct = Math.min(remaining, sale.balance)
-      const newPaid = sale.amount_paid + deduct
-      const newBalance = sale.balance - deduct
+      if (remaining <= 0) break;
+      if (sale.balance <= 0) continue;
+      const deduct = Math.min(remaining, sale.balance);
+      const newPaid = sale.amount_paid + deduct;
+      const newBalance = sale.balance - deduct;
       await supabase
         .from("credit_sales")
         .update({ amount_paid: newPaid, balance: newBalance })
-        .eq("id", sale.id)
-      remaining -= deduct
+        .eq("id", sale.id);
+      remaining -= deduct;
     }
 
-    toast.success("Payment recorded")
-    setPayOpen(false)
-    setPayAmount("")
-    setPayNotes("")
-    setPayDate(todayIso())
-    setPayLoading(false)
-    router.refresh()
+    toast.success("Payment recorded");
+    setPayOpen(false);
+    setPayAmount("");
+    setPayNotes("");
+    setPayDate(todayIso());
+    setPayLoading(false);
+    router.refresh();
   }
 
   // ─── Add customer ─────────────────────────────────────────────────────────
   async function handleAddCustomer() {
     if (!addName.trim()) {
-      toast.error("Name is required")
-      return
+      toast.error("Name is required");
+      return;
     }
     if (!addPhone.trim()) {
-      toast.error("Phone number is required")
-      return
+      toast.error("Phone number is required");
+      return;
     }
 
-    setAddLoading(true)
-    const branchId = session.branch_id
+    setAddLoading(true);
+    const branchId = session.branch_id;
 
     const { error } = await supabase.from("customers").insert({
       shop_id: session.shop_id,
       ...(branchId ? { branch_id: branchId } : {}),
       name: addName.trim(),
       phone: addPhone.trim() || null,
-    })
+    });
 
     if (error) {
-      toast.error(error.message)
-      setAddLoading(false)
-      return
+      toast.error(error.message);
+      setAddLoading(false);
+      return;
     }
 
-    toast.success("Customer added")
-    setAddOpen(false)
-    setAddName("")
-    setAddPhone("")
-    setAddLoading(false)
-    router.refresh()
+    toast.success("Customer added");
+    setAddOpen(false);
+    setAddName("");
+    setAddPhone("");
+    setAddLoading(false);
+    router.refresh();
   }
 
   // ─── Edit customer ────────────────────────────────────────────────────────
   function openEditDialog() {
-    if (!selectedGroup) return
-    setEditName(selectedGroup.name)
-    setEditPhone(selectedGroup.phone ?? "")
-    setEditOpen(true)
+    if (!selectedGroup) return;
+    setEditName(selectedGroup.name);
+    setEditPhone(selectedGroup.phone ?? "");
+    setEditOpen(true);
   }
 
   async function handleEditCustomer() {
-    if (!selectedGroup) return
+    if (!selectedGroup) return;
     if (!editName.trim()) {
-      toast.error("Name is required")
-      return
+      toast.error("Name is required");
+      return;
     }
 
-    setEditLoading(true)
+    setEditLoading(true);
 
     const { error } = await supabase
       .from("customers")
@@ -311,48 +314,48 @@ export function CreditClient({
         name: editName.trim(),
         phone: editPhone.trim() || null,
       })
-      .eq("id", selectedGroup.customerId)
+      .eq("id", selectedGroup.customerId);
 
     if (error) {
-      toast.error(error.message)
-      setEditLoading(false)
-      return
+      toast.error(error.message);
+      setEditLoading(false);
+      return;
     }
 
-    toast.success("Customer updated")
-    setEditOpen(false)
-    setEditLoading(false)
-    router.refresh()
+    toast.success("Customer updated");
+    setEditOpen(false);
+    setEditLoading(false);
+    router.refresh();
   }
 
   // ─── Delete customer ──────────────────────────────────────────────────────
   async function handleDeleteCustomer() {
-    if (!selectedGroup) return
+    if (!selectedGroup) return;
 
     if (selectedGroup.sales.length > 0) {
-      toast.error("Cannot delete customer with credit history")
-      setDeleteOpen(false)
-      return
+      toast.error("Cannot delete customer with credit history");
+      setDeleteOpen(false);
+      return;
     }
 
-    setDeleteLoading(true)
+    setDeleteLoading(true);
 
     const { error } = await supabase
       .from("customers")
       .delete()
-      .eq("id", selectedGroup.customerId)
+      .eq("id", selectedGroup.customerId);
 
     if (error) {
-      toast.error(error.message)
-      setDeleteLoading(false)
-      return
+      toast.error(error.message);
+      setDeleteLoading(false);
+      return;
     }
 
-    toast.success("Customer deleted")
-    setDeleteOpen(false)
-    setSelectedCustomerId(null)
-    setDeleteLoading(false)
-    router.refresh()
+    toast.success("Customer deleted");
+    setDeleteOpen(false);
+    setSelectedCustomerId(null);
+    setDeleteLoading(false);
+    router.refresh();
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -367,9 +370,9 @@ export function CreditClient({
             size="icon-sm"
             variant="ghost"
             onClick={() => {
-              setAddName("")
-              setAddPhone("")
-              setAddOpen(true)
+              setAddName("");
+              setAddPhone("");
+              setAddOpen(true);
             }}
             aria-label="New customer"
           >
@@ -386,14 +389,14 @@ export function CreditClient({
             </div>
           ) : (
             customerGroups.map((group) => {
-              const isActive = group.customerId === selectedCustomerId
+              const isActive = group.customerId === selectedCustomerId;
               return (
                 <button
                   key={group.customerId}
                   onClick={() => setSelectedCustomerId(group.customerId)}
                   className={`border rounded-lg p-3 w-full text-left transition-colors ${
                     isActive
-                      ? "border-primary bg-primary/10"
+                      ? "border-primary bg-primary/5"
                       : "border-border bg-background hover:bg-muted/50"
                   }`}
                 >
@@ -418,7 +421,7 @@ export function CreditClient({
                     </div>
                   )}
                 </button>
-              )
+              );
             })
           )}
         </div>
@@ -429,7 +432,9 @@ export function CreditClient({
         {!selectedGroup ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <User className="size-12 opacity-30" />
-            <p className="text-sm">Select a customer to view their credit history</p>
+            <p className="text-sm">
+              Select a customer to view their credit history
+            </p>
           </div>
         ) : (
           <>
@@ -442,25 +447,45 @@ export function CreditClient({
                     <User className="size-5 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="font-semibold text-base leading-tight truncate">{selectedGroup.name}</h2>
+                    <h2 className="font-semibold text-base leading-tight truncate">
+                      {selectedGroup.name}
+                    </h2>
                     {selectedGroup.phone && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <Phone className="size-3" />{selectedGroup.phone}
+                        <Phone className="size-3" />
+                        {selectedGroup.phone}
                       </p>
                     )}
                   </div>
                 </div>
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button size="sm" variant="ghost" onClick={openEditDialog} aria-label="Edit">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={openEditDialog}
+                    aria-label="Edit"
+                  >
                     <Pencil className="size-3.5" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive" aria-label="Delete">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDeleteOpen(true)}
+                    className="text-destructive hover:text-destructive"
+                    aria-label="Delete"
+                  >
                     <Trash2 className="size-3.5" />
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => { setPayAmount(""); setPayNotes(""); setPayDate(todayIso()); setPayMethod("cash"); setPayOpen(true) }}
+                    onClick={() => {
+                      setPayAmount("");
+                      setPayNotes("");
+                      setPayDate(todayIso());
+                      setPayMethod("cash");
+                      setPayOpen(true);
+                    }}
                   >
                     <Wallet className="size-3.5 mr-1.5" />
                     Record Payment
@@ -473,23 +498,35 @@ export function CreditClient({
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <TrendingDown className="size-3.5 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">Total Credit</p>
+                    <p className="text-xs text-muted-foreground">
+                      Total Credit
+                    </p>
                   </div>
-                  <p className="font-bold text-sm tabular-nums">{formatCurrency(selectedGroup.totalOwed, currency)}</p>
+                  <p className="font-bold text-sm tabular-nums">
+                    {formatCurrency(selectedGroup.totalOwed, currency)}
+                  </p>
                 </div>
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <CheckCircle2 className="size-3.5 text-green-600" />
                     <p className="text-xs text-muted-foreground">Total Paid</p>
                   </div>
-                  <p className="font-bold text-sm text-green-700 tabular-nums">{formatCurrency(selectedGroup.totalPaid, currency)}</p>
+                  <p className="font-bold text-sm text-green-700 tabular-nums">
+                    {formatCurrency(selectedGroup.totalPaid, currency)}
+                  </p>
                 </div>
-                <div className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+                <div
+                  className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
+                >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <ArrowDownLeft className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`} />
+                    <ArrowDownLeft
+                      className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`}
+                    />
                     <p className="text-xs text-muted-foreground">Outstanding</p>
                   </div>
-                  <p className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
+                  <p
+                    className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}
+                  >
                     {formatCurrency(selectedGroup.outstanding, currency)}
                   </p>
                 </div>
@@ -503,29 +540,59 @@ export function CreditClient({
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <TrendingDown className="size-4 text-muted-foreground" />
                   Credit Sales
-                  <Badge variant="secondary" className="text-xs">{selectedGroup.sales.length}</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {selectedGroup.sales.length}
+                  </Badge>
                 </h3>
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-muted/40 border-b">
-                        <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Date</th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Amount</th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Paid</th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Balance</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                          Date
+                        </th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                          Amount
+                        </th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                          Paid
+                        </th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                          Balance
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {selectedGroup.sales.length === 0 ? (
-                        <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground text-sm">No credit sales</td></tr>
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-4 py-8 text-center text-muted-foreground text-sm"
+                          >
+                            No credit sales
+                          </td>
+                        </tr>
                       ) : (
                         selectedGroup.sales.map((sale) => (
-                          <tr key={sale.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3 text-sm">{sale.sale?.sale_date ? formatDate(sale.sale.sale_date) : "—"}</td>
-                            <td className="px-4 py-3 text-right tabular-nums font-medium">{formatCurrency(sale.amount_owed, currency)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums text-green-700">{formatCurrency(sale.amount_paid, currency)}</td>
+                          <tr
+                            key={sale.id}
+                            className="hover:bg-muted/20 transition-colors"
+                          >
+                            <td className="px-4 py-3 text-sm">
+                              {sale.sale?.sale_date
+                                ? formatDate(sale.sale.sale_date)
+                                : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums font-medium">
+                              {formatCurrency(sale.amount_owed, currency)}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums text-green-700">
+                              {formatCurrency(sale.amount_paid, currency)}
+                            </td>
                             <td className="px-4 py-3 text-right tabular-nums">
-                              <span className={`font-semibold ${sale.balance > 0 ? "text-red-600" : "text-green-700"}`}>
+                              <span
+                                className={`font-semibold ${sale.balance > 0 ? "text-red-600" : "text-green-700"}`}
+                              >
                                 {formatCurrency(sale.balance, currency)}
                               </span>
                             </td>
@@ -542,7 +609,11 @@ export function CreditClient({
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-muted-foreground" />
                   Payments Received
-                  {!paymentsLoading && <Badge variant="secondary" className="text-xs">{payments.length}</Badge>}
+                  {!paymentsLoading && (
+                    <Badge variant="secondary" className="text-xs">
+                      {payments.length}
+                    </Badge>
+                  )}
                 </h3>
                 <div className="border rounded-lg overflow-hidden">
                   {paymentsLoading ? (
@@ -554,22 +625,46 @@ export function CreditClient({
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-muted/40 border-b">
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Date</th>
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Method</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Amount</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                            Date
+                          </th>
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                            Method
+                          </th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                            Amount
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {payments.length === 0 ? (
-                          <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-sm">No payments recorded</td></tr>
+                          <tr>
+                            <td
+                              colSpan={3}
+                              className="px-4 py-8 text-center text-muted-foreground text-sm"
+                            >
+                              No payments recorded
+                            </td>
+                          </tr>
                         ) : (
                           payments.map((p) => (
-                            <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                              <td className="px-4 py-3">{formatDate(p.payment_date)}</td>
+                            <tr
+                              key={p.id}
+                              className="hover:bg-muted/20 transition-colors"
+                            >
                               <td className="px-4 py-3">
-                                {p.payment_method === "cash"
-                                  ? <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Cash</Badge>
-                                  : <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">Mobile</Badge>}
+                                {formatDate(p.payment_date)}
+                              </td>
+                              <td className="px-4 py-3">
+                                {p.payment_method === "cash" ? (
+                                  <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
+                                    Cash
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">
+                                    Mobile
+                                  </Badge>
+                                )}
                               </td>
                               <td className="px-4 py-3 text-right font-bold text-green-700 tabular-nums">
                                 +{formatCurrency(p.amount, currency)}
@@ -622,7 +717,9 @@ export function CreditClient({
               <Label htmlFor="pay-method">Payment Method</Label>
               <Select
                 value={payMethod}
-                onValueChange={(v) => setPayMethod(v as "cash" | "mobile_money")}
+                onValueChange={(v) =>
+                  setPayMethod(v as "cash" | "mobile_money")
+                }
               >
                 <SelectTrigger id="pay-method" className="w-full">
                   <SelectValue placeholder="Select method" />
@@ -676,7 +773,9 @@ export function CreditClient({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="add-phone">Phone Number <span className="text-destructive">*</span></Label>
+              <Label htmlFor="add-phone">
+                Phone Number <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="add-phone"
                 type="tel"
@@ -777,5 +876,5 @@ export function CreditClient({
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
