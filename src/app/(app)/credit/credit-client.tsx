@@ -416,7 +416,7 @@ export function CreditClient({
                   </div>
                   {group.phone && (
                     <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                      <Phone className="size-3 shrink-0" />
+                      <Phone className="size-3 shrink-1" />
                       <span>{group.phone}</span>
                     </div>
                   )}
