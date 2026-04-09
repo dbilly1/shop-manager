@@ -67,7 +67,8 @@ const PIE_COLORS = [
   "#64748b",
 ]
 
-function formatAxisDate(date: string): string {
+function formatAxisDate(label: unknown): string {
+  const date = String(label ?? "")
   return new Date(date + "T00:00:00").toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -493,7 +494,7 @@ export function ReportsClient({
                 width={80}
               />
               <Tooltip
-                formatter={(v: number) => formatCurrency(v, currency)}
+                formatter={(v: unknown) => formatCurrency(Number(v), currency)}
                 labelFormatter={formatAxisDate}
               />
               <Legend />
@@ -543,7 +544,7 @@ export function ReportsClient({
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(v: number) => formatCurrency(v, currency)}
+                  formatter={(v: unknown) => formatCurrency(Number(v), currency)}
                 />
                 <Legend />
               </PieChart>
@@ -576,7 +577,7 @@ export function ReportsClient({
                 width={80}
               />
               <Tooltip
-                formatter={(v: number) => formatCurrency(v, currency)}
+                formatter={(v: unknown) => formatCurrency(Number(v), currency)}
                 labelFormatter={formatAxisDate}
               />
               <Legend />
