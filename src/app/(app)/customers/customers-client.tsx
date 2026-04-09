@@ -6,12 +6,11 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Plus, Search, Loader2, UserCircle } from "lucide-react"
+import { Plus, Search, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
 
@@ -56,6 +55,10 @@ export function CustomersClient({ customers, currency, session, branches }: Prop
       toast.error("Enter a customer name")
       return
     }
+    if (!phone.trim()) {
+      toast.error("Phone number is required")
+      return
+    }
     const bid = session.branch_id ?? branchId
     if (!bid) {
       toast.error("Select a branch")
@@ -86,7 +89,7 @@ export function CustomersClient({ customers, currency, session, branches }: Prop
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Customers</h1>
         <Button size="sm" onClick={() => setOpen(true)}>
@@ -100,40 +103,45 @@ export function CustomersClient({ customers, currency, session, branches }: Prop
         <Input placeholder="Search by name or phone..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No customers found</CardContent></Card>
-        ) : (
-          filtered.map((c) => (
-            <Card key={c.id}>
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="rounded-full bg-muted p-2 shrink-0">
-                      <UserCircle className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.phone ?? "No phone"}{c.email ? ` · ${c.email}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    {c.outstanding_credit > 0 ? (
-                      <>
-                        <p className="text-sm font-medium text-red-600">{formatCurrency(c.outstanding_credit, currency)}</p>
-                        <p className="text-xs text-muted-foreground">Outstanding</p>
-                      </>
-                    ) : (
-                      <Badge variant="outline" className="text-green-700 border-green-300 text-xs">Clear</Badge>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 border-b">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Phone</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Email</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Outstanding</th>
+              <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground text-sm">
+                  No customers found
+                </td>
+              </tr>
+            ) : (
+              filtered.map((c) => (
+                <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-medium">{c.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.phone ?? <span className="text-muted-foreground/40 italic">—</span>}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.email ?? <span className="text-muted-foreground/40 italic">—</span>}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {c.outstanding_credit > 0
+                      ? <span className="font-semibold text-red-600">{formatCurrency(c.outstanding_credit, currency)}</span>
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {c.outstanding_credit > 0
+                      ? <Badge className="bg-red-100 text-red-700 hover:bg-red-100 text-xs">Owing</Badge>
+                      : <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200 text-xs">Clear</Badge>}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -154,7 +162,7 @@ export function CustomersClient({ customers, currency, session, branches }: Prop
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Customer name" />
             </div>
             <div className="space-y-2">
-              <Label>Phone <span className="text-muted-foreground">(optional)</span></Label>
+              <Label>Phone <span className="text-destructive">*</span></Label>
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
             </div>
             <div className="space-y-2">

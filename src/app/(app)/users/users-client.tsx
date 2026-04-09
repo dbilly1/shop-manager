@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatRole, formatDate } from "@/utils/format"
 import { UserPlus, Loader2, RefreshCw, XCircle } from "lucide-react"
@@ -134,67 +132,81 @@ export function UsersClient({ members, invites, branches, session }: Props) {
         </TabsList>
 
         <TabsContent value="members" className="mt-4">
-          <Card>
-            <CardContent className="pt-4">
-              {activeMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No members yet</p>
-              ) : (
-                <div className="divide-y">
-                  {activeMembers.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">{m.user_id.slice(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="text-sm font-medium">{m.user_id.slice(0, 8)}…</p>
-                          <p className="text-xs text-muted-foreground">
-                            {m.branch ? m.branch.name : "All branches"}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="capitalize text-xs">
-                        {formatRole(m.role)}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">User ID</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Role</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Branch</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Joined</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {activeMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground text-sm">No members yet</td>
+                  </tr>
+                ) : (
+                  activeMembers.map((m) => (
+                    <tr key={m.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{m.user_id.slice(0, 8)}…</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="capitalize text-xs">{formatRole(m.role)}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{m.branch ? m.branch.name : <span className="italic text-muted-foreground/50">All branches</span>}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{formatDate(m.created_at)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </TabsContent>
 
         <TabsContent value="invites" className="mt-4">
-          <Card>
-            <CardContent className="pt-4">
-              {invites.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No pending invites</p>
-              ) : (
-                <div className="divide-y">
-                  {invites.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between py-3">
-                      <div>
-                        <p className="text-sm font-medium">{inv.email}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatRole(inv.role)}{inv.branch ? ` · ${inv.branch.name}` : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Expires {formatDate(inv.expires_at)}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="text-xs">Pending</Badge>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => resendInvite(inv.id)}>
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => cancelInvite(inv.id)}>
-                          <XCircle className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Email</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Role</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Branch</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Expires</th>
+                  <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {invites.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground text-sm">No pending invites</td>
+                  </tr>
+                ) : (
+                  invites.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 font-medium">{inv.email}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="capitalize text-xs">{formatRole(inv.role)}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{inv.branch ? inv.branch.name : <span className="italic text-muted-foreground/50">All branches</span>}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.expires_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <Badge variant="secondary" className="text-xs">Pending</Badge>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => resendInvite(inv.id)} title="Resend invite">
+                            <RefreshCw className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => cancelInvite(inv.id)} title="Cancel invite">
+                            <XCircle className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </TabsContent>
       </Tabs>
 

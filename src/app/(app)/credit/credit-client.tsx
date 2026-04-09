@@ -31,6 +31,9 @@ import {
   Plus,
   Loader2,
   CreditCard,
+  TrendingDown,
+  CheckCircle2,
+  ArrowDownLeft,
 } from "lucide-react"
 import type { SessionContext } from "@/types"
 
@@ -211,7 +214,6 @@ export function CreditClient({
       amount,
       payment_method: payMethod,
       payment_date: payDate,
-      notes: payNotes || null,
       recorded_by: session.user_id,
     })
 
@@ -255,6 +257,10 @@ export function CreditClient({
   async function handleAddCustomer() {
     if (!addName.trim()) {
       toast.error("Name is required")
+      return
+    }
+    if (!addPhone.trim()) {
+      toast.error("Phone number is required")
       return
     }
 
@@ -387,8 +393,8 @@ export function CreditClient({
                   onClick={() => setSelectedCustomerId(group.customerId)}
                   className={`border rounded-lg p-3 w-full text-left transition-colors ${
                     isActive
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-background hover:bg-muted/50"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -419,214 +425,165 @@ export function CreditClient({
       </div>
 
       {/* ── Right panel ── */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-hidden flex flex-col">
         {!selectedGroup ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <User className="size-12 opacity-30" />
             <p className="text-sm">Select a customer to view their credit history</p>
           </div>
         ) : (
-          <div className="max-w-2xl mx-auto space-y-6">
-            {/* Header row */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-bold">{selectedGroup.name}</h1>
-                {selectedGroup.phone && (
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {selectedGroup.phone}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={openEditDialog}
-                  aria-label="Edit customer"
-                >
-                  <Pencil className="size-4" />
-                </Button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => setDeleteOpen(true)}
-                  aria-label="Delete customer"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setPayAmount("")
-                    setPayNotes("")
-                    setPayDate(todayIso())
-                    setPayMethod("cash")
-                    setPayOpen(true)
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Wallet className="size-4 mr-1.5" />
-                  Record Payment
-                </Button>
-              </div>
-            </div>
-
-            {/* Balance summary */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Credit</p>
-                <p className="font-bold text-slate-800 text-sm">
-                  {formatCurrency(selectedGroup.totalOwed, currency)}
-                </p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Paid</p>
-                <p className="font-bold text-green-700 text-sm">
-                  {formatCurrency(selectedGroup.totalPaid, currency)}
-                </p>
-              </div>
-              <div
-                className={`border rounded-lg p-4 ${
-                  selectedGroup.outstanding > 0
-                    ? "bg-red-50 border-red-200"
-                    : "bg-green-50 border-green-200"
-                }`}
-              >
-                <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
-                <p
-                  className={`font-bold text-sm ${
-                    selectedGroup.outstanding > 0
-                      ? "text-red-700"
-                      : "text-green-700"
-                  }`}
-                >
-                  {formatCurrency(selectedGroup.outstanding, currency)}
-                </p>
-              </div>
-            </div>
-
-            {/* Credit Sales table */}
-            <div>
-              <h3 className="text-sm font-semibold mb-2">Credit Sales</h3>
-              <div className="border rounded-lg overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                        Date
-                      </th>
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                        Items
-                      </th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">
-                        Amount
-                      </th>
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                        Recorded By
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedGroup.sales.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-4 py-6 text-center text-muted-foreground"
-                        >
-                          No credit sales
-                        </td>
-                      </tr>
-                    ) : (
-                      selectedGroup.sales.map((sale) => (
-                        <tr key={sale.id} className="border-b last:border-0">
-                          <td className="px-4 py-3">
-                            {sale.sale?.sale_date
-                              ? formatDate(sale.sale.sale_date)
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">—</td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            {formatCurrency(sale.amount_owed, currency)}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">—</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Payment History */}
-            <div>
-              <h3 className="text-sm font-semibold mb-2">Payments Received</h3>
-              <div className="border rounded-lg overflow-x-auto">
-                {paymentsLoading ? (
-                  <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
-                    <Loader2 className="size-4 animate-spin" />
-                    <span className="text-sm">Loading payments…</span>
+          <>
+            {/* Sticky header */}
+            <div className="border-b px-6 py-4 shrink-0 bg-background">
+              <div className="flex items-center justify-between gap-4">
+                {/* Avatar + name + phone */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <User className="size-5 text-primary" />
                   </div>
-                ) : (
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-base leading-tight truncate">{selectedGroup.name}</h2>
+                    {selectedGroup.phone && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Phone className="size-3" />{selectedGroup.phone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* Actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button size="sm" variant="ghost" onClick={openEditDialog} aria-label="Edit">
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive" aria-label="Delete">
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => { setPayAmount(""); setPayNotes(""); setPayDate(todayIso()); setPayMethod("cash"); setPayOpen(true) }}
+                  >
+                    <Wallet className="size-3.5 mr-1.5" />
+                    Record Payment
+                  </Button>
+                </div>
+              </div>
+
+              {/* Summary stats */}
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <TrendingDown className="size-3.5 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Total Credit</p>
+                  </div>
+                  <p className="font-bold text-sm tabular-nums">{formatCurrency(selectedGroup.totalOwed, currency)}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <CheckCircle2 className="size-3.5 text-green-600" />
+                    <p className="text-xs text-muted-foreground">Total Paid</p>
+                  </div>
+                  <p className="font-bold text-sm text-green-700 tabular-nums">{formatCurrency(selectedGroup.totalPaid, currency)}</p>
+                </div>
+                <div className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <ArrowDownLeft className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`} />
+                    <p className="text-xs text-muted-foreground">Outstanding</p>
+                  </div>
+                  <p className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
+                    {formatCurrency(selectedGroup.outstanding, currency)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable tables */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Credit Sales */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <TrendingDown className="size-4 text-muted-foreground" />
+                  Credit Sales
+                  <Badge variant="secondary" className="text-xs">{selectedGroup.sales.length}</Badge>
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                          Date
-                        </th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                          Method
-                        </th>
-                        <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">
-                          Amount
-                        </th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                          Notes
-                        </th>
+                      <tr className="bg-muted/40 border-b">
+                        <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Amount</th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Paid</th>
+                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Balance</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {payments.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            className="px-4 py-6 text-center text-muted-foreground"
-                          >
-                            No payments recorded
-                          </td>
-                        </tr>
+                    <tbody className="divide-y">
+                      {selectedGroup.sales.length === 0 ? (
+                        <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground text-sm">No credit sales</td></tr>
                       ) : (
-                        payments.map((p) => (
-                          <tr key={p.id} className="border-b last:border-0">
-                            <td className="px-4 py-3">
-                              {formatDate(p.payment_date)}
-                            </td>
-                            <td className="px-4 py-3">
-                              {p.payment_method === "cash" ? (
-                                <Badge className="bg-green-100 text-green-700 border-green-200">
-                                  Cash
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                                  Mobile
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-green-700">
-                              +{formatCurrency(p.amount, currency)}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {p.notes ?? "—"}
+                        selectedGroup.sales.map((sale) => (
+                          <tr key={sale.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-3 text-sm">{sale.sale?.sale_date ? formatDate(sale.sale.sale_date) : "—"}</td>
+                            <td className="px-4 py-3 text-right tabular-nums font-medium">{formatCurrency(sale.amount_owed, currency)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-green-700">{formatCurrency(sale.amount_paid, currency)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">
+                              <span className={`font-semibold ${sale.balance > 0 ? "text-red-600" : "text-green-700"}`}>
+                                {formatCurrency(sale.balance, currency)}
+                              </span>
                             </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
-                )}
+                </div>
+              </div>
+
+              {/* Payment History */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-muted-foreground" />
+                  Payments Received
+                  {!paymentsLoading && <Badge variant="secondary" className="text-xs">{payments.length}</Badge>}
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
+                  {paymentsLoading ? (
+                    <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="text-sm">Loading…</span>
+                    </div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/40 border-b">
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Date</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Method</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {payments.length === 0 ? (
+                          <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-sm">No payments recorded</td></tr>
+                        ) : (
+                          payments.map((p) => (
+                            <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                              <td className="px-4 py-3">{formatDate(p.payment_date)}</td>
+                              <td className="px-4 py-3">
+                                {p.payment_method === "cash"
+                                  ? <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Cash</Badge>
+                                  : <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">Mobile</Badge>}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-green-700 tabular-nums">
+                                +{formatCurrency(p.amount, currency)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -687,16 +644,6 @@ export function CreditClient({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="pay-notes">Notes (optional)</Label>
-              <Input
-                id="pay-notes"
-                placeholder="Add a note…"
-                value={payNotes}
-                onChange={(e) => setPayNotes(e.target.value)}
-              />
-            </div>
-
             <Button
               className="w-full"
               onClick={handleRecordPayment}
@@ -729,7 +676,7 @@ export function CreditClient({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="add-phone">Phone Number (optional)</Label>
+              <Label htmlFor="add-phone">Phone Number <span className="text-destructive">*</span></Label>
               <Input
                 id="add-phone"
                 type="tel"

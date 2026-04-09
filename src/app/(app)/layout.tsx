@@ -61,6 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         branch_id: member.branch_id,
         role: member.role as SessionContext["role"],
         is_super_admin: false,
+        full_name: user.user_metadata?.full_name ?? null,
       }
       setSession(ctx)
 

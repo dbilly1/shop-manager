@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatCurrency } from "@/utils/format"
 import {
   ShoppingCart, Layers, Plus, X, CalendarDays, Loader2,
-  TrendingUp, TrendingDown, Minus, ChevronRight, ChevronDown, ArrowLeft,
+  TrendingUp, TrendingDown, Minus, ChevronRight, ArrowLeft,
   Pencil, Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -64,14 +64,32 @@ interface SaleItem {
 
 interface IndividualSale {
   id: string
+  sale_date: string
   total_amount: number
   payment_method: string
+  customer_id: string | null
   created_at: string
   recorded_by: string
   recorded_by_name: string | null
   notes: string | null
   batch_id: string | null
   sale_items: SaleItem[]
+}
+
+interface FullSalePatch {
+  sale_date?: string
+  payment_method?: string
+  customer_id?: string | null
+  total_amount?: number
+  notes?: string | null
+  items?: Array<{
+    id: string
+    quantity_kg: number
+    quantity_units: number
+    quantity_boxes: number
+    unit_price: number
+    line_total: number
+  }>
 }
 
 interface Props {
@@ -148,52 +166,122 @@ function SaleCard({
 }
 
 function EditSaleDialog({
-  sale, currency, onClose, onSave,
+  sale, currency, customers, canBackdate, onClose, onSave,
 }: {
   sale: IndividualSale
   currency: string
+  customers: { id: string; name: string; phone: string | null }[]
+  canBackdate: boolean
   onClose: () => void
-  onSave: (id: string, patch: { payment_method?: string; notes?: string | null }) => Promise<void>
+  onSave: (id: string, patch: FullSalePatch) => Promise<void>
 }) {
+  interface EditItem {
+    id: string
+    product_name: string
+    unit_type: string
+    quantity: number
+    unit_price: number
+  }
+
+  function initItems(): EditItem[] {
+    return sale.sale_items.map((item) => {
+      const ut = item.product?.unit_type ?? "units"
+      const qty = ut === "kg" ? item.quantity_kg : ut === "boxes" ? item.quantity_boxes : item.quantity_units
+      return { id: item.id, product_name: item.product?.name ?? "Item", unit_type: ut, quantity: qty, unit_price: item.unit_price }
+    })
+  }
+
+  const [saleDate, setSaleDate] = useState(sale.sale_date)
   const [paymentMethod, setPaymentMethod] = useState(sale.payment_method)
+  const [customerId, setCustomerId] = useState(sale.customer_id ?? "")
   const [notes, setNotes] = useState(sale.notes ?? "")
+  const [editItems, setEditItems] = useState<EditItem[]>(initItems)
   const [saving, setSaving] = useState(false)
 
+  function updateItem(idx: number, field: "quantity" | "unit_price", value: number) {
+    setEditItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item))
+  }
+
+  const newTotal = editItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+
   async function handleSave() {
+    if (paymentMethod === "credit" && !customerId) {
+      toast.error("Select a customer for credit sales")
+      return
+    }
     setSaving(true)
     await onSave(sale.id, {
+      sale_date: saleDate,
       payment_method: paymentMethod,
+      customer_id: paymentMethod === "credit" ? customerId || null : null,
+      total_amount: newTotal,
       notes: notes.trim() || null,
+      items: editItems.map((item) => ({
+        id: item.id,
+        quantity_kg: item.unit_type === "kg" ? item.quantity : 0,
+        quantity_units: item.unit_type === "units" ? item.quantity : 0,
+        quantity_boxes: item.unit_type === "boxes" ? item.quantity : 0,
+        unit_price: item.unit_price,
+        line_total: item.unit_price * item.quantity,
+      })),
     })
     setSaving(false)
   }
 
-  const time = new Date(sale.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Sale</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-1">
-          {/* Sale summary (read-only) */}
-          <div className="bg-muted/40 rounded-lg px-3 py-2 text-sm space-y-1">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Time</span>
-              <span>{time}</span>
+
+          {/* Date */}
+          {canBackdate && (
+            <div className="space-y-1.5">
+              <Label>Sale Date</Label>
+              <Input type="date" value={saleDate} max={TODAY} onChange={(e) => setSaleDate(e.target.value)} className="h-9" />
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Amount</span>
-              <span className="font-bold">{formatCurrency(sale.total_amount, currency)}</span>
+          )}
+
+          {/* Items */}
+          {editItems.length > 0 && (
+            <div className="space-y-2">
+              <Label>Items</Label>
+              {editItems.map((item, idx) => (
+                <div key={item.id} className="border rounded-lg p-3 space-y-2 bg-muted/20">
+                  <p className="text-sm font-medium">{item.product_name}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Qty ({item.unit_type})</Label>
+                      <Input
+                        type="number" min={0} step="any"
+                        value={item.quantity || ""}
+                        placeholder="0"
+                        onChange={(e) => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Unit Price</Label>
+                      <Input
+                        type="number" min={0} step="any"
+                        value={item.unit_price || ""}
+                        placeholder="0.00"
+                        onChange={(e) => updateItem(idx, "unit_price", parseFloat(e.target.value) || 0)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                      {formatCurrency(item.unit_price * item.quantity, currency)}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-            {sale.sale_items.length > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Items</span>
-                <span className="text-right">{sale.sale_items.map((i) => i.product?.name).filter(Boolean).join(", ")}</span>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Payment method */}
           <div className="space-y-1.5">
@@ -215,15 +303,33 @@ function EditSaleDialog({
             </div>
           </div>
 
+          {/* Customer — only for credit */}
+          {paymentMethod === "credit" && (
+            <div className="space-y-1.5">
+              <Label>Customer <span className="text-destructive">*</span></Label>
+              <Select value={customerId} onValueChange={(v) => setCustomerId(v ?? "")}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-1.5">
             <Label>Notes</Label>
-            <Input
-              placeholder="Optional notes..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="h-9"
-            />
+            <Input placeholder="Optional notes…" value={notes} onChange={(e) => setNotes(e.target.value)} className="h-9" />
+          </div>
+
+          {/* Total preview */}
+          <div className="bg-muted/40 rounded-lg px-3 py-2.5 flex justify-between text-sm">
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-bold tabular-nums">{formatCurrency(newTotal, currency)}</span>
           </div>
 
           <div className="flex gap-2">
@@ -271,14 +377,13 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [editingSale, setEditingSale] = useState<IndividualSale | null>(null)
-  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set())
 
   const fetchSalesForDate = useCallback(async (date: string): Promise<IndividualSale[]> => {
     const supabase = createClient()
     const branchId = session.branch_id ?? selectedBranchId
     let q = supabase
       .from("sales")
-      .select("id, total_amount, payment_method, created_at, recorded_by, recorded_by_name, notes, batch_id, sale_items(id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type))")
+      .select("id, sale_date, total_amount, payment_method, customer_id, created_at, recorded_by, recorded_by_name, notes, batch_id, sale_items(id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type))")
       .eq("shop_id", session.shop_id!)
       .eq("sale_date", date)
       .order("created_at", { ascending: false })
@@ -394,9 +499,12 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
 
   async function addCustomer() {
     if (!newCustomerName.trim()) return
+    if (!newCustomerPhone.trim()) { toast.error("Phone number is required"); return }
     setAddingCustomer(true)
     const supabase = createClient()
-    const { data, error } = await supabase.from("customers").insert({ shop_id: session.shop_id, name: newCustomerName.trim(), phone: newCustomerPhone || null }).select().single()
+    const branchId = session.branch_id ?? selectedBranchId
+    if (!branchId) { toast.error("Select a branch first"); setAddingCustomer(false); return }
+    const { data, error } = await supabase.from("customers").insert({ shop_id: session.shop_id, branch_id: branchId, name: newCustomerName.trim(), phone: newCustomerPhone.trim() }).select().single()
     if (error) { toast.error(error.message); setAddingCustomer(false); return }
     setCustomers((prev) => [...prev, data])
     setCustomerId(data.id)
@@ -419,11 +527,46 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setDeletingId(null)
   }
 
-  async function updateSale(id: string, patch: { payment_method?: string; notes?: string | null }) {
+  async function updateSale(id: string, patch: FullSalePatch) {
     const supabase = createClient()
-    const { error } = await supabase.from("sales").update(patch).eq("id", id)
-    if (error) { toast.error(error.message); return }
-    const applyPatch = (s: IndividualSale) => s.id === id ? { ...s, ...patch } : s
+
+    // Build sales-table update (omit `items`)
+    const { items, ...salePatch } = patch
+    if (Object.keys(salePatch).length > 0) {
+      const { error } = await supabase.from("sales").update(salePatch).eq("id", id)
+      if (error) { toast.error(error.message); return }
+    }
+
+    // Update each sale_item
+    if (items && items.length > 0) {
+      for (const item of items) {
+        const { error: ie } = await supabase
+          .from("sale_items")
+          .update({
+            quantity_kg: item.quantity_kg,
+            quantity_units: item.quantity_units,
+            quantity_boxes: item.quantity_boxes,
+            unit_price: item.unit_price,
+            line_total: item.line_total,
+          })
+          .eq("id", item.id)
+        if (ie) { toast.error(ie.message); return }
+      }
+    }
+
+    // Apply patch to local state
+    const applyPatch = (s: IndividualSale): IndividualSale => {
+      if (s.id !== id) return s
+      const updated: IndividualSale = { ...s, ...salePatch }
+      if (items) {
+        updated.sale_items = s.sale_items.map((si) => {
+          const ni = items.find((i) => i.id === si.id)
+          return ni ? { ...si, quantity_kg: ni.quantity_kg, quantity_units: ni.quantity_units, quantity_boxes: ni.quantity_boxes, unit_price: ni.unit_price, line_total: ni.line_total } : si
+        })
+      }
+      return updated
+    }
+
     if (isSalesperson) setTodaySales((prev) => prev.map(applyPatch))
     else setDateSales((prev) => prev.map(applyPatch))
     setEditingSale(null)
@@ -709,7 +852,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
             <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b shrink-0">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => { setSelectedDate(null); setExpandedBatches(new Set()) }}
+                  onClick={() => setSelectedDate(null)}
                   className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -853,65 +996,43 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
 
                 return (
                   <div className="space-y-4 p-4">
-                    {/* ── Bulk Entries ── */}
-                    {batches.length > 0 && (
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2 px-1">
-                          Bulk Entries ({batches.length})
-                        </p>
-                        <div className="space-y-2">
-                          {batches.map(([batchId, sales]) => {
-                            const isOpen = expandedBatches.has(batchId)
-                            const batchTotal = sales.reduce((s, x) => s + x.total_amount, 0)
-                            const batchTime = new Date(sales[0].created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                            const recorder = sales[0].recorded_by_name ?? sales[0].recorded_by.slice(0, 8)
-                            return (
-                              <div key={batchId} className="border rounded-lg overflow-hidden">
-                                <button
-                                  onClick={() => setExpandedBatches((prev) => {
-                                    const next = new Set(prev)
-                                    if (next.has(batchId)) next.delete(batchId)
-                                    else next.add(batchId)
-                                    return next
-                                  })}
-                                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <Layers className="h-4 w-4 text-blue-600 shrink-0" />
-                                    <span className="font-semibold text-blue-800 text-sm">
-                                      {sales.length} order{sales.length !== 1 ? "s" : ""}
-                                    </span>
-                                    <span className="text-xs text-blue-500">{batchTime} · {recorder}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-blue-800 text-sm tabular-nums">
-                                      {formatCurrency(batchTotal, currency)}
-                                    </span>
-                                    {isOpen
-                                      ? <ChevronDown className="h-4 w-4 text-blue-500" />
-                                      : <ChevronRight className="h-4 w-4 text-blue-500" />
-                                    }
-                                  </div>
-                                </button>
-                                {isOpen && (
-                                  <div className="border-t overflow-x-auto">
-                                    <SalesTable sales={sales} />
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
+                    {/* ── Bulk Entries — each batch shows a header then individual rows ── */}
+                    {batches.map(([batchId, batchSales]) => {
+                      const batchTotal = batchSales.reduce((s, x) => s + x.total_amount, 0)
+                      const batchTime = new Date(batchSales[0].created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                      const recorder = batchSales[0].recorded_by_name ?? batchSales[0].recorded_by.slice(0, 8)
+                      return (
+                        <div key={batchId} className="rounded-lg border overflow-hidden">
+                          {/* Batch header — always visible, no toggle */}
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-primary/10 border-b">
+                            <div className="flex items-center gap-2">
+                              <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span className="text-xs font-semibold text-primary">
+                                Bulk Entry · {batchSales.length} order{batchSales.length !== 1 ? "s" : ""}
+                              </span>
+                              <span className="text-[11px] text-primary/70">{batchTime} · {recorder}</span>
+                            </div>
+                            <span className="text-xs font-bold text-primary tabular-nums">
+                              {formatCurrency(batchTotal, currency)}
+                            </span>
+                          </div>
+                          {/* Individual sale rows — same table structure as direct entries */}
+                          <div className="overflow-x-auto">
+                            <SalesTable sales={batchSales} />
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })}
 
                     {/* ── Direct Entries ── */}
                     {directSales.length > 0 && (
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2 px-1">
-                          Direct Entries ({directSales.length})
-                        </p>
-                        <div className="bg-white rounded-lg border overflow-x-auto">
+                      <div className="rounded-lg border overflow-hidden">
+                        <div className="px-4 py-2.5 bg-slate-50 border-b">
+                          <span className="text-xs font-semibold text-slate-600">
+                            Direct {directSales.length === 1 ? "Entry" : `Entries · ${directSales.length} orders`}
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto">
                           <SalesTable sales={directSales} />
                         </div>
                       </div>
@@ -994,6 +1115,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
         <EditSaleDialog
           sale={editingSale}
           currency={currency}
+          customers={customers}
+          canBackdate={canBackdate}
           onClose={() => setEditingSale(null)}
           onSave={updateSale}
         />
@@ -1009,10 +1132,10 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
               <Input value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Customer name" />
             </div>
             <div className="space-y-1.5">
-              <Label>Phone <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Label>Phone <span className="text-destructive">*</span></Label>
               <Input value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="+233..." />
             </div>
-            <Button onClick={addCustomer} disabled={addingCustomer || !newCustomerName.trim()} className="w-full">
+            <Button onClick={addCustomer} disabled={addingCustomer || !newCustomerName.trim() || !newCustomerPhone.trim()} className="w-full">
               {addingCustomer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Customer
             </Button>

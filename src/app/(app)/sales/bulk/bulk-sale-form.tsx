@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/utils/format";
-import { Plus, Trash2, Loader2, X, ChevronDown } from "lucide-react";
+import { Plus, Loader2, X, ChevronDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionContext } from "@/types";
 
@@ -92,7 +92,7 @@ export function BulkEntryDialog({
   open,
   onOpenChange,
   branchProducts,
-  customers,
+  customers: initialCustomers,
   currency,
   session,
   branches,
@@ -113,11 +113,45 @@ export function BulkEntryDialog({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Local customer list (can grow when new ones are added inline)
+  const [customers, setCustomers] = useState(initialCustomers);
+
+  // Add-customer mini dialog
+  const [addCustOpen, setAddCustOpen] = useState(false);
+  const [addCustForIdx, setAddCustForIdx] = useState<number | null>(null);
+  const [newCustName, setNewCustName] = useState("");
+  const [newCustPhone, setNewCustPhone] = useState("");
+  const [addCustLoading, setAddCustLoading] = useState(false);
+
+  async function handleAddCustomer() {
+    if (!newCustName.trim()) { toast.error("Name is required"); return; }
+    if (!newCustPhone.trim()) { toast.error("Phone number is required"); return; }
+    const branchId = session.branch_id ?? selectedBranchId;
+    if (!branchId) { toast.error("Select a branch first"); return; }
+    setAddCustLoading(true);
+    const supabase = createClient();
+    const { data, error: ce } = await supabase
+      .from("customers")
+      .insert({ shop_id: session.shop_id, branch_id: branchId, name: newCustName.trim(), phone: newCustPhone.trim() })
+      .select()
+      .single();
+    setAddCustLoading(false);
+    if (ce || !data) { toast.error(ce?.message ?? "Failed"); return; }
+    setCustomers((prev) => [...prev, data]);
+    if (addCustForIdx !== null) updateLine(addCustForIdx, "customer_id", data.id);
+    setAddCustOpen(false);
+    setNewCustName("");
+    setNewCustPhone("");
+    setAddCustForIdx(null);
+    toast.success("Customer added");
+  }
+
   function resetForm() {
     setLines([emptyLine()]);
     setNotes("");
     setExpenses([]);
     setReconcile(false);
+    setCustomers(initialCustomers);
     setActualCash("");
     setActualMobile("");
     setError("");
@@ -218,24 +252,12 @@ export function BulkEntryDialog({
     setError("");
     const supabase = createClient();
 
-    // Generate a shared batch_id for all sales in this bulk session
+    // One shared batch_id ties all orders in this session together
     const batchId = crypto.randomUUID();
 
-    // Group valid lines by payment method + customer
-    const groups = new Map<string, SaleLine[]>();
-    for (const l of validLines) {
-      const key = `${l.payment_method}::${l.customer_id}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(l);
-    }
-
-    for (const [, groupLines] of groups) {
-      const groupTotal = groupLines.reduce(
-        (s, l) => s + (l.unit_price * l.quantity - l.discount),
-        0,
-      );
-      const pm = groupLines[0].payment_method;
-      const custId = groupLines[0].customer_id || null;
+    // Each line is its own independent order — no grouping
+    for (const line of validLines) {
+      const lineTotal = Math.max(0, line.unit_price * line.quantity - line.discount);
 
       const { data: sale, error: saleError } = await supabase
         .from("sales")
@@ -243,9 +265,9 @@ export function BulkEntryDialog({
           shop_id: session.shop_id,
           branch_id: branchId,
           sale_date: saleDate,
-          total_amount: groupTotal,
-          payment_method: pm,
-          customer_id: custId,
+          total_amount: lineTotal,
+          payment_method: line.payment_method,
+          customer_id: line.customer_id || null,
           recorded_by: session.user_id,
           recorded_by_name: session.full_name ?? null,
           notes: notes || null,
@@ -260,62 +282,51 @@ export function BulkEntryDialog({
         return;
       }
 
-      const items = groupLines.map((l) => ({
+      const { error: itemError } = await supabase.from("sale_items").insert({
         sale_id: sale.id,
         shop_id: session.shop_id,
         branch_id: branchId,
-        product_id: l.product_id,
-        quantity_kg: l.unit_type === "kg" ? l.quantity : 0,
-        quantity_units: l.unit_type === "units" ? l.quantity : 0,
-        quantity_boxes: l.unit_type === "boxes" ? l.boxes : 0,
-        unit_price: l.unit_price,
-        discount_amount: l.discount,
-        line_total: l.unit_price * l.quantity - l.discount,
-        cost_price_at_sale: l.cost_price,
-      }));
-      const { error: itemsError } = await supabase
-        .from("sale_items")
-        .insert(items);
-      if (itemsError) {
-        setError(itemsError.message);
+        product_id: line.product_id,
+        quantity_kg: line.unit_type === "kg" ? line.quantity : 0,
+        quantity_units: line.unit_type === "units" ? line.quantity : 0,
+        quantity_boxes: line.unit_type === "boxes" ? line.boxes : 0,
+        unit_price: line.unit_price,
+        discount_amount: line.discount,
+        line_total: lineTotal,
+        cost_price_at_sale: line.cost_price,
+      });
+      if (itemError) {
+        setError(itemError.message);
         setLoading(false);
         return;
       }
 
-      for (const l of groupLines) {
-        const bp = branchProducts.find((p) => p.id === l.branch_product_id);
-        if (!bp) continue;
+      // Deduct stock
+      const bp = branchProducts.find((p) => p.id === line.branch_product_id);
+      if (bp) {
         const update: Record<string, number> = {};
-        if (l.unit_type === "kg")
-          update.current_stock_kg = Math.max(
-            0,
-            bp.current_stock_kg - l.quantity,
-          );
-        else if (l.unit_type === "boxes")
-          update.current_stock_boxes = Math.max(
-            0,
-            bp.current_stock_boxes - l.boxes,
-          );
+        if (line.unit_type === "kg")
+          update.current_stock_kg = Math.max(0, bp.current_stock_kg - line.quantity);
+        else if (line.unit_type === "boxes")
+          update.current_stock_boxes = Math.max(0, bp.current_stock_boxes - line.boxes);
         else
-          update.current_stock_units = Math.max(
-            0,
-            bp.current_stock_units - l.quantity,
-          );
+          update.current_stock_units = Math.max(0, bp.current_stock_units - line.quantity);
         await supabase
           .from("branch_products")
           .update({ ...update, updated_at: new Date().toISOString() })
           .eq("id", bp.id);
       }
 
-      if (pm === "credit" && custId) {
+      // Credit ledger entry
+      if (line.payment_method === "credit" && line.customer_id) {
         await supabase.from("credit_sales").insert({
           shop_id: session.shop_id,
           branch_id: branchId,
           sale_id: sale.id,
-          customer_id: custId,
-          amount_owed: groupTotal,
+          customer_id: line.customer_id,
+          amount_owed: lineTotal,
           amount_paid: 0,
-          balance: groupTotal,
+          balance: lineTotal,
         });
       }
     }
@@ -368,6 +379,7 @@ export function BulkEntryDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="w-6xl max-w-6xl sm:max-w-none p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -437,7 +449,7 @@ export function BulkEntryDialog({
                   Product <span className="text-destructive">*</span>
                 </th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                  Qty (primary)
+                  Qty
                 </th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
                   Boxes
@@ -582,24 +594,33 @@ export function BulkEntryDialog({
                         ))}
                       </div>
                       {line.payment_method === "credit" && (
-                        <Select
-                          value={line.customer_id}
-                          onValueChange={(v) =>
-                            updateLine(idx, "customer_id", v ?? "")
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs mt-1 w-full">
-                            <SelectValue placeholder="Select customer" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {customers.map((c) => (
-                              <SelectItem key={c.id} value={c.id} label={c.name}>
-                                {c.name}
-                                {c.phone ? ` · ${c.phone}` : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-1 mt-1">
+                          <Select
+                            value={line.customer_id}
+                            onValueChange={(v) =>
+                              updateLine(idx, "customer_id", v ?? "")
+                            }
+                          >
+                            <SelectTrigger className="h-7 text-xs flex-1">
+                              <SelectValue placeholder="Select customer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {customers.map((c) => (
+                                <SelectItem key={c.id} value={c.id} label={c.name}>
+                                  {c.name}
+                                  {c.phone ? ` · ${c.phone}` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <button
+                            onClick={() => { setAddCustForIdx(idx); setAddCustOpen(true); }}
+                            className="h-7 w-7 shrink-0 rounded border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            title="Add new customer"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
                       )}
                     </td>
                     <td
@@ -640,8 +661,7 @@ export function BulkEntryDialog({
             />
             <div className="text-right shrink-0">
               <p className="text-xs text-muted-foreground">
-                {validLines.length} valid order
-                {validLines.length !== 1 ? "s" : ""}
+                {validLines.length} order{validLines.length !== 1 ? "s" : ""}
               </p>
               <p className="text-base font-bold text-primary tabular-nums">
                 {formatCurrency(total, currency)}
@@ -799,5 +819,45 @@ export function BulkEntryDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* ── Add Customer dialog ── */}
+    <Dialog open={addCustOpen} onOpenChange={(v) => { if (!v) { setAddCustOpen(false); setAddCustForIdx(null); setNewCustName(""); setNewCustPhone(""); } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Customer</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Name <span className="text-destructive">*</span></label>
+            <input
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              placeholder="Customer name"
+              value={newCustName}
+              onChange={(e) => setNewCustName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Phone <span className="text-destructive">*</span></label>
+            <input
+              type="tel"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              placeholder="+233..."
+              value={newCustPhone}
+              onChange={(e) => setNewCustPhone(e.target.value)}
+            />
+          </div>
+          <Button
+            className="w-full"
+            onClick={handleAddCustomer}
+            disabled={addCustLoading || !newCustName.trim() || !newCustPhone.trim()}
+          >
+            {addCustLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Add Customer
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

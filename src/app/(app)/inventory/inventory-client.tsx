@@ -124,28 +124,15 @@ function stockDisplay(bp: BranchProduct) {
   return { text, low, out };
 }
 
-function emptyBulkRow(branchProducts: BranchProduct[]): BulkRestockRow {
-  const bp = branchProducts[0];
-  if (!bp?.product)
-    return {
-      branch_product_id: "",
-      product_id: "",
-      product_name: "",
-      unit_type: "units",
-      qty: 0,
-      boxes: 0,
-      cost_per_unit: 0,
-      supplier: "",
-      notes: "",
-    };
+function emptyBulkRow(): BulkRestockRow {
   return {
-    branch_product_id: bp.id,
-    product_id: bp.product.id,
-    product_name: bp.product.name,
-    unit_type: bp.product.unit_type,
+    branch_product_id: "",
+    product_id: "",
+    product_name: "",
+    unit_type: "units",
     qty: 0,
     boxes: 0,
-    cost_per_unit: bp.product.cost_price,
+    cost_per_unit: 0,
     supplier: "",
     notes: "",
   };
@@ -248,7 +235,7 @@ export function InventoryClient({
   // ─── Bulk Restock dialog ─────────────────────────────────────────
   const [bulkRestockOpen, setBulkRestockOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRestockRow[]>([
-    emptyBulkRow(branchProducts),
+    emptyBulkRow(),
   ]);
   const [bulkSaving, setBulkSaving] = useState(false);
 
@@ -465,6 +452,20 @@ export function InventoryClient({
       return;
     }
 
+    // Weighted-average cost price update
+    const currentStock =
+      ut === "kg" ? restockBp.current_stock_kg : restockBp.current_stock_units;
+    const oldCost = restockBp.product?.cost_price ?? 0;
+    const newAvgCost =
+      currentStock + totalPrimary > 0
+        ? (currentStock * oldCost + totalPrimary * costPerUnit) /
+          (currentStock + totalPrimary)
+        : costPerUnit;
+    await supabase
+      .from("products")
+      .update({ cost_price: newAvgCost })
+      .eq("id", restockBp.product!.id);
+
     await supabase
       .from("restocks")
       .insert({
@@ -521,8 +522,15 @@ export function InventoryClient({
         (r.qty > 0 || r.boxes > 0) &&
         r.cost_per_unit > 0,
     );
+    const missingCost = bulkRows.some(
+      (r) => r.branch_product_id && (r.qty > 0 || r.boxes > 0) && !r.cost_per_unit,
+    );
+    if (missingCost) {
+      toast.error("Cost per unit is required for all rows");
+      return;
+    }
     if (validRows.length === 0) {
-      toast.error("Add at least one valid row");
+      toast.error("Add at least one valid row with product, quantity and cost");
       return;
     }
     setBulkSaving(true);
@@ -534,6 +542,8 @@ export function InventoryClient({
       const ut = row.unit_type;
       const boxPrimary = boxesToPrimary(row.boxes, bp.product?.units_per_box);
       const totalPrimary = row.qty + boxPrimary;
+
+      // Stock update
       const update: Record<string, number> = {};
       if (ut === "kg")
         update.current_stock_kg = bp.current_stock_kg + totalPrimary;
@@ -542,6 +552,21 @@ export function InventoryClient({
         .from("branch_products")
         .update({ ...update, updated_at: new Date().toISOString() })
         .eq("id", bp.id);
+
+      // Weighted-average cost price update
+      const currentStock =
+        ut === "kg" ? bp.current_stock_kg : bp.current_stock_units;
+      const oldCost = bp.product?.cost_price ?? 0;
+      const newAvgCost =
+        currentStock + totalPrimary > 0
+          ? (currentStock * oldCost + totalPrimary * row.cost_per_unit) /
+            (currentStock + totalPrimary)
+          : row.cost_per_unit;
+      await supabase
+        .from("products")
+        .update({ cost_price: newAvgCost })
+        .eq("id", row.product_id);
+
       await supabase
         .from("restocks")
         .insert({
@@ -561,7 +586,7 @@ export function InventoryClient({
 
     toast.success(`${validRows.length} product(s) restocked`);
     setBulkRestockOpen(false);
-    setBulkRows([emptyBulkRow(branchProducts)]);
+    setBulkRows([emptyBulkRow()]);
     setBulkSaving(false);
     router.refresh();
   }
@@ -1278,7 +1303,7 @@ export function InventoryClient({
         open={bulkRestockOpen}
         onOpenChange={(v) => {
           setBulkRestockOpen(v);
-          if (!v) setBulkRows([emptyBulkRow(branchProducts)]);
+          if (!v) setBulkRows([emptyBulkRow()]);
         }}
       >
         <DialogContent className="w-5xl max-w-6xl sm:max-w-none p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
@@ -1440,7 +1465,7 @@ export function InventoryClient({
               size="sm"
               variant="outline"
               onClick={() =>
-                setBulkRows((prev) => [...prev, emptyBulkRow(branchProducts)])
+                setBulkRows((prev) => [...prev, emptyBulkRow()])
               }
             >
               <Plus className="mr-1.5 h-4 w-4" />
