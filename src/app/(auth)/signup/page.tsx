@@ -4,11 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
 
 export default function SignupPage() {
@@ -51,67 +46,84 @@ export default function SignupPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create an account</CardTitle>
-        <CardDescription>Start your free ShopManager account today</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSignup} className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="name">Full name</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="Jane Smith"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoComplete="name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Min. 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              autoComplete="new-password"
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Create account
-          </Button>
-        </form>
-        <p className="text-sm text-center mt-4 text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/login" className="text-foreground underline underline-offset-4">
-            Sign in
-          </Link>
+    <>
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "#f5f1ea", margin: 0, marginBottom: "0.25rem" }}>
+          Create your account
+        </h2>
+        <p style={{ fontSize: "0.85rem", color: "rgba(232,226,212,0.45)", margin: 0 }}>
+          Start your free ShopManager account — no credit card needed
         </p>
-      </CardContent>
-    </Card>
+      </div>
+
+      {error && (
+        <div className="auth-error" style={{ marginBottom: "1.25rem" }}>
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSignup} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div>
+          <label htmlFor="name" className="auth-label">Full name</label>
+          <input
+            id="name"
+            type="text"
+            className="auth-input"
+            placeholder="Jane Smith"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            autoComplete="name"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="email" className="auth-label">Email address</label>
+          <input
+            id="email"
+            type="email"
+            className="auth-input"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="auth-label">Password</label>
+          <input
+            id="password"
+            type="password"
+            className="auth-input"
+            placeholder="Min. 8 characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+        </div>
+
+        <button type="submit" className="auth-btn" disabled={loading} style={{ marginTop: "0.25rem" }}>
+          {loading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : null}
+          {loading ? "Creating account…" : "Create free account"}
+        </button>
+      </form>
+
+      <hr className="auth-divider" />
+
+      <p style={{ fontSize: "0.8375rem", textAlign: "center", color: "rgba(232,226,212,0.45)", margin: 0 }}>
+        Already have an account?{" "}
+        <Link href="/login" className="auth-link">
+          Sign in
+        </Link>
+      </p>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+    </>
   )
 }

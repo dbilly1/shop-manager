@@ -82,9 +82,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         .order("name")
       setBranches(branchData ?? [])
 
-      // For branch-level roles, pre-select their branch
+      // Sync initial selectedBranchId with the sm_branch cookie
       if (member.branch_id) {
+        // Branch-scoped user — lock to their branch and stamp the cookie
         setSelectedBranchId(member.branch_id)
+        document.cookie = `sm_branch=${member.branch_id}; path=/; SameSite=Lax`
+      } else {
+        // Shop-level user — restore last topnav selection from cookie (if still valid)
+        const cookieMatch = document.cookie.match(/(?:^|;\s*)sm_branch=([^;]+)/)
+        const cookieBranch = cookieMatch ? cookieMatch[1] : null
+        if (cookieBranch && branchData?.find((b) => b.id === cookieBranch)) {
+          setSelectedBranchId(cookieBranch)
+        }
       }
 
       // Load active announcements
@@ -159,9 +168,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const selectedBranch = branches.find((b) => b.id === selectedBranchId) ?? null
 
+  // Wraps the raw state setter: also writes the sm_branch cookie so every
+  // subsequent page navigation picks up the new branch server-side, then
+  // refreshes the current page so its RSC re-runs with the updated cookie.
+  function handleSetBranch(id: string | null) {
+    setSelectedBranchId(id)
+    if (id) {
+      document.cookie = `sm_branch=${id}; path=/; SameSite=Lax`
+    } else {
+      document.cookie = `sm_branch=; path=/; max-age=0; SameSite=Lax`
+    }
+    router.refresh()
+  }
+
   return (
     <SessionCtx.Provider value={session}>
-      <BranchCtx.Provider value={{ branches, selectedBranchId, setSelectedBranchId, selectedBranch }}>
+      <BranchCtx.Provider value={{ branches, selectedBranchId, setSelectedBranchId: handleSetBranch, selectedBranch }}>
         <div className="flex min-h-screen bg-background">
           <Sidebar shopName={shop?.name ?? "ShopManager"} shopLogo={shop?.logo_url} shopColour={shopColour} />
           <div className="flex flex-1 flex-col overflow-hidden">

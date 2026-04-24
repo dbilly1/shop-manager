@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 import { redirect } from "next/navigation"
 import { ReconciliationClient } from "./reconciliation-client"
 
@@ -33,6 +34,7 @@ export default async function ReconciliationPage() {
   if (!session || !session.shop_id) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   // ── 60 days ago cutoff ──────────────────────────────────────────────────────
   const sixtyDaysAgo = new Date(Date.now() - 59 * 86400000)
@@ -47,7 +49,7 @@ export default async function ReconciliationPage() {
     .gte("reconciliation_date", sixtyDaysAgo)
     .order("reconciliation_date", { ascending: false })
 
-  if (session.branch_id) reconQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) reconQuery.eq("branch_id", activeBranchId)
   const { data: reconciliations } = await reconQuery
 
   // ── 2. Sales date + batch_id for session-count map ──────────────────────────
@@ -57,7 +59,7 @@ export default async function ReconciliationPage() {
     .eq("shop_id", session.shop_id)
     .gte("sale_date", sixtyDaysAgo)
 
-  if (session.branch_id) salesQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) salesQuery.eq("branch_id", activeBranchId)
   const { data: salesRows } = await salesQuery
 
   // Build date → { directCount, batchIds } map

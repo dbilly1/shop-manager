@@ -23,8 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Bell, LogOut, Settings, User, Menu } from "lucide-react"
+import { LogOut, Settings, Menu } from "lucide-react"
 import { AlertsBell } from "@/components/shared/alerts-bell"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 interface TopNavProps {
   userEmail: string
@@ -77,6 +78,9 @@ export function TopNav({ userEmail, userName }: TopNavProps) {
       )}
 
       <div className="flex-1" />
+
+      {/* Theme toggle */}
+      <ThemeToggle />
 
       {/* Alerts bell */}
       <AlertsBell />

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { LayoutDashboard, Building2, Users, CreditCard, Megaphone, Settings, LogOut } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Toaster } from "@/components/ui/sonner"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -51,7 +52,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             })}
           </nav>
         </ScrollArea>
-        <div className="p-2 border-t">
+        <div className="p-2 border-t space-y-1">
+          <div className="flex items-center justify-between px-3 py-1.5">
+            <span className="text-xs text-muted-foreground">Theme</span>
+            <ThemeToggle />
+          </div>
           <form action="/api/auth/signout" method="POST">
             <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
               <LogOut className="h-4 w-4" />

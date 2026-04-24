@@ -95,7 +95,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, icon, iconBg }: KpiCardProps) {
   return (
-    <div className="bg-white border rounded-lg p-4">
+    <div className="bg-card border rounded-lg p-4">
       <div className={`h-8 w-8 rounded-full flex items-center justify-center mb-3 ${iconBg}`}>
         {icon}
       </div>
@@ -370,25 +370,25 @@ export function ReportsClient({
             <KpiCard
               label="Total Revenue"
               value={formatCurrency(totalRevenue, currency)}
-              iconBg="bg-blue-100"
+              iconBg="bg-blue-500/15"
               icon={<DollarSign className="h-4 w-4 text-blue-600" />}
             />
             <KpiCard
               label="Cash Sales"
               value={formatCurrency(cashRevenue, currency)}
-              iconBg="bg-green-100"
+              iconBg="bg-green-500/15"
               icon={<DollarSign className="h-4 w-4 text-green-600" />}
             />
             <KpiCard
               label="Mobile Sales"
               value={formatCurrency(mobileRevenue, currency)}
-              iconBg="bg-blue-100"
+              iconBg="bg-blue-500/15"
               icon={<CreditCard className="h-4 w-4 text-blue-600" />}
             />
             <KpiCard
               label="Credit Sales"
               value={formatCurrency(creditRevenue, currency)}
-              iconBg="bg-orange-100"
+              iconBg="bg-orange-500/15"
               icon={<ShoppingCart className="h-4 w-4 text-orange-600" />}
             />
           </div>
@@ -398,13 +398,13 @@ export function ReportsClient({
             <KpiCard
               label="Total Expenses"
               value={formatCurrency(totalExpenses, currency)}
-              iconBg="bg-red-100"
+              iconBg="bg-red-500/15"
               icon={<Receipt className="h-4 w-4 text-red-600" />}
             />
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-card border rounded-lg p-4">
               <div
                 className={`h-8 w-8 rounded-full flex items-center justify-center mb-3 ${
-                  grossProfit >= 0 ? "bg-green-100" : "bg-red-100"
+                  grossProfit >= 0 ? "bg-green-500/15" : "bg-red-500/15"
                 }`}
               >
                 {grossProfit >= 0 ? (
@@ -424,9 +424,9 @@ export function ReportsClient({
                 Gross Profit
               </div>
             </div>
-            <div className="bg-white border rounded-lg p-4">
-              <div className="h-8 w-8 rounded-full flex items-center justify-center mb-3 bg-slate-100">
-                <BarChart2 className="h-4 w-4 text-slate-600" />
+            <div className="bg-card border rounded-lg p-4">
+              <div className="h-8 w-8 rounded-full flex items-center justify-center mb-3 bg-muted">
+                <BarChart2 className="h-4 w-4 text-muted-foreground" />
               </div>
               <div
                 className={`text-xl font-bold ${
@@ -447,7 +447,7 @@ export function ReportsClient({
         </div>
 
         {/* Right sidebar — Credit Position */}
-        <div className="bg-white border rounded-lg p-4 flex flex-col gap-4">
+        <div className="bg-card border rounded-lg p-4 flex flex-col gap-4">
           <p className="font-semibold text-sm">Credit Position</p>
           <div className="border-t pt-3">
             <p className="text-xs text-muted-foreground mb-1">
@@ -475,7 +475,7 @@ export function ReportsClient({
       {/* 4. Charts — Row 1 */}
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Daily Revenue vs Profit line chart */}
-        <div className="bg-white border rounded-lg p-4 lg:col-span-2">
+        <div className="bg-card border rounded-lg p-4 lg:col-span-2">
           <p className="font-semibold text-sm mb-4">Daily Revenue vs Profit</p>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart
@@ -519,7 +519,7 @@ export function ReportsClient({
         </div>
 
         {/* Expense breakdown pie */}
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-card border rounded-lg p-4">
           <p className="font-semibold text-sm mb-4">Expenses by Category</p>
           {expenseByCategory.length === 0 ? (
             <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground">
@@ -556,7 +556,7 @@ export function ReportsClient({
       {/* Charts — Row 2 */}
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Revenue by Payment Method stacked bar */}
-        <div className="bg-white border rounded-lg p-4 lg:col-span-2">
+        <div className="bg-card border rounded-lg p-4 lg:col-span-2">
           <p className="font-semibold text-sm mb-4">
             Revenue by Payment Method
           </p>
@@ -589,7 +589,7 @@ export function ReportsClient({
         </div>
 
         {/* Reconciliation Summary */}
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-card border rounded-lg p-4">
           <p className="font-semibold text-sm mb-4">Quick Summary</p>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -623,7 +623,7 @@ export function ReportsClient({
       </div>
 
       {/* 5. Product Profitability table */}
-      <div className="bg-white border rounded-lg overflow-x-auto">
+      <div className="bg-card border rounded-lg overflow-x-auto">
         <div className="p-4 border-b">
           <p className="font-semibold">Product Profitability</p>
           <p className="text-xs text-muted-foreground mt-0.5">

@@ -41,16 +41,16 @@ const CATEGORIES = [
 
 function getCategoryColor(category: string): string {
   const map: Record<string, string> = {
-    Electricity: "bg-yellow-100 text-yellow-800",
-    Transport: "bg-blue-100 text-blue-800",
-    Wages: "bg-purple-100 text-purple-800",
-    Rent: "bg-red-100 text-red-800",
-    Maintenance: "bg-orange-100 text-orange-800",
-    Packaging: "bg-teal-100 text-teal-800",
-    Cleaning: "bg-green-100 text-green-800",
-    Miscellaneous: "bg-slate-100 text-slate-700",
+    Electricity: "bg-yellow-500/15 text-yellow-600",
+    Transport: "bg-blue-500/15 text-blue-600",
+    Wages: "bg-purple-500/15 text-purple-600",
+    Rent: "bg-red-500/15 text-red-600",
+    Maintenance: "bg-orange-500/15 text-orange-600",
+    Packaging: "bg-teal-500/15 text-teal-600",
+    Cleaning: "bg-green-500/15 text-green-600",
+    Miscellaneous: "bg-muted text-muted-foreground",
   };
-  return map[category] ?? "bg-slate-100 text-slate-700";
+  return map[category] ?? "bg-muted text-muted-foreground";
 }
 
 function formatExpenseDate(dateStr: string): string {
@@ -242,25 +242,25 @@ export function ExpensesClient({
       {/* ── Left sidebar ─────────────────────────────────────────────────────── */}
       <aside className="flex flex-col gap-4">
         {/* Last 30 days card */}
-        <div className="bg-white rounded border p-4">
+        <div className="bg-card rounded border p-4">
           <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/15">
               <Receipt className="w-4 h-4 text-amber-600" />
             </div>
-            <p className="text-sm font-medium text-slate-600">Last 30 Days</p>
+            <p className="text-sm font-medium text-muted-foreground">Last 30 Days</p>
           </div>
-          <p className="text-2xl font-bold text-slate-900">
+          <p className="text-2xl font-bold">
             {formatCurrency(last30Total, currency)}
           </p>
         </div>
 
         {/* By category card */}
-        <div className="bg-white rounded border p-4 flex-1">
-          <p className="text-sm font-semibold text-slate-700 mb-3">
+        <div className="bg-card rounded border p-4 flex-1">
+          <p className="text-sm font-semibold mb-3">
             By Category
           </p>
           {byCategory.length === 0 ? (
-            <p className="text-xs text-slate-400">No expenses yet</p>
+            <p className="text-xs text-muted-foreground">No expenses yet</p>
           ) : (
             <ul className="space-y-2">
               {byCategory.map(([cat, total]) => (
@@ -273,7 +273,7 @@ export function ExpensesClient({
                   >
                     {cat}
                   </span>
-                  <span className="text-xs font-medium text-slate-700 tabular-nums shrink-0">
+                  <span className="text-xs font-medium tabular-nums shrink-0">
                     {formatCurrency(total, currency)}
                   </span>
                 </li>
@@ -290,21 +290,21 @@ export function ExpensesClient({
       </aside>
 
       {/* ── Right table ──────────────────────────────────────────────────────── */}
-      <main className="col-span-1 lg:col-span-3 bg-white rounded border overflow-x-auto">
+      <main className="col-span-1 lg:col-span-3 bg-card rounded border overflow-x-auto">
         {/* Header */}
         <div className="px-5 py-4 border-b">
-          <h2 className="text-base font-semibold text-slate-900">Expenses</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Last 200 entries</p>
+          <h2 className="text-base font-semibold">Expenses</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Last 200 entries</p>
         </div>
 
         {expenses.length === 0 ? (
-          <div className="py-16 text-center text-sm text-slate-400">
+          <div className="py-16 text-center text-sm text-muted-foreground">
             No expenses recorded yet
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+              <tr className="border-b bg-muted/40 text-xs text-muted-foreground uppercase tracking-wide">
                 <th className="px-4 py-3 text-left font-medium">Date</th>
                 <th className="px-4 py-3 text-left font-medium">Category</th>
                 <th className="px-4 py-3 text-left font-medium">Description</th>
@@ -314,14 +314,14 @@ export function ExpensesClient({
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {expenses.map((expense) => (
                 <tr
                   key={expense.id}
-                  className="hover:bg-slate-50 transition-colors"
+                  className="hover:bg-muted/40 transition-colors"
                 >
                   {/* Date */}
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                  <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                     {formatExpenseDate(expense.expense_date)}
                   </td>
 
@@ -335,21 +335,21 @@ export function ExpensesClient({
                   </td>
 
                   {/* Description */}
-                  <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
+                  <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">
                     {expense.description ?? (
-                      <span className="text-slate-300 italic">—</span>
+                      <span className="text-muted-foreground/50 italic">—</span>
                     )}
                   </td>
 
                   {/* Amount */}
-                  <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                  <td className="px-4 py-3 text-right font-bold tabular-nums whitespace-nowrap">
                     {formatCurrency(expense.amount, currency)}
                   </td>
 
                   {/* Till badge */}
                   <td className="px-4 py-3 text-center">
                     {expense.payment_method === "cash" && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
                         <Banknote className="w-3 h-3" />
                         Till
                       </span>
@@ -357,7 +357,7 @@ export function ExpensesClient({
                   </td>
 
                   {/* By */}
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                     {expense.recorded_by_name ??
                       expense.recorded_by.slice(0, 8)}
                   </td>
@@ -366,7 +366,7 @@ export function ExpensesClient({
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => openEdit(expense)}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       aria-label="Edit expense"
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -484,7 +484,7 @@ export function ExpensesClient({
                 checked={paidFromTill}
                 onChange={(e) => setPaidFromTill(e.target.checked)}
               />
-              <span className="text-sm text-slate-700">
+              <span className="text-sm">
                 Paid from till (cash)
               </span>
             </label>

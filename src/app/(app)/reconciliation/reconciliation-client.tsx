@@ -382,7 +382,7 @@ export function ReconciliationClient({
 
         {/* Backdated notice */}
         {isBackdated && (
-          <div className="mx-6 mt-4 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded px-3 py-2 flex items-center gap-1.5 shrink-0">
+          <div className="mx-6 mt-4 bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs rounded px-3 py-2 flex items-center gap-1.5 shrink-0">
             <Clock className="h-3.5 w-3.5 shrink-0" />
             Backdated entry for {formatDateLabel(selectedDate)}
           </div>
@@ -416,30 +416,30 @@ export function ReconciliationClient({
               return (
                 <div key={sess.batchId ?? "direct"} className="border rounded-lg overflow-hidden">
                   {/* Card header */}
-                  <div className="px-4 py-3 bg-slate-50 border-b flex items-center justify-between">
+                  <div className="px-4 py-3 bg-muted/40 border-b flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {sess.sessionType === "direct"
-                        ? <FileText className="h-4 w-4 text-slate-500 shrink-0" />
-                        : <Layers className="h-4 w-4 text-blue-500 shrink-0" />
+                        ? <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        : <Layers className="h-4 w-4 text-primary shrink-0" />
                       }
                       <span className="font-semibold text-sm">Session {idx + 1}</span>
-                      <span className={`text-xs ${sess.sessionType === "bulk" ? "text-blue-500" : "text-slate-500"}`}>
+                      <span className={`text-xs ${sess.sessionType === "bulk" ? "text-primary" : "text-muted-foreground"}`}>
                         {sess.sessionType === "direct" ? "Direct entries" : "Bulk entry"} · {formatTime(sess.time)}
                       </span>
                     </div>
                     {sess.existingStatus && (
                       sess.existingStatus === "balanced"
-                        ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs px-2">Balanced</Badge>
-                        : <Badge className="bg-red-100 text-red-800 hover:bg-red-100 text-xs px-2">Mismatch</Badge>
+                        ? <Badge className="bg-green-500/15 text-green-600 hover:bg-green-500/15 text-xs px-2">Balanced</Badge>
+                        : <Badge className="bg-red-500/15 text-red-600 hover:bg-red-500/15 text-xs px-2">Mismatch</Badge>
                     )}
                   </div>
 
                   {/* Card body */}
                   <div className="p-4 space-y-3">
                     {/* Expected breakdown */}
-                    <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 text-sm">
+                    <div className="bg-muted/40 rounded-lg p-3 space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Cash Sales</span>
+                        <span className="text-muted-foreground">Cash Sales</span>
                         <span className="tabular-nums font-medium">{formatCurrency(sess.cashSales, currency)}</span>
                       </div>
                       {sess.creditRepayments > 0 && (
@@ -455,10 +455,10 @@ export function ReconciliationClient({
                         </div>
                       )}
                       <div className="border-t pt-1.5 flex justify-between">
-                        <span className="font-bold text-slate-900">Expected Cash</span>
-                        <span className="tabular-nums font-bold text-slate-900">{formatCurrency(expectedCash, currency)}</span>
+                        <span className="font-bold">Expected Cash</span>
+                        <span className="tabular-nums font-bold">{formatCurrency(expectedCash, currency)}</span>
                       </div>
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-muted-foreground">
                         <span>Mobile Money</span>
                         <span className="tabular-nums">{formatCurrency(expectedMobile, currency)}</span>
                       </div>
@@ -538,12 +538,12 @@ export function ReconciliationClient({
                     {/* Status banner */}
                     {bothFilled && (
                       allBalanced ? (
-                        <div className="flex items-center gap-2 rounded-md border bg-green-50 border-green-200 text-green-800 px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2 rounded-md border bg-green-500/10 border-green-500/20 text-green-600 px-3 py-2 text-sm">
                           <CheckCircle2 className="h-4 w-4 shrink-0" />
                           <span className="font-medium">Balanced</span>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-0.5 rounded-md border bg-red-50 border-red-200 text-red-800 px-3 py-2 text-sm">
+                        <div className="flex flex-col gap-0.5 rounded-md border bg-red-500/10 border-red-500/20 text-red-600 px-3 py-2 text-sm">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="h-4 w-4 shrink-0" />
                             <span className="font-medium">Variance detected</span>
@@ -587,7 +587,7 @@ export function ReconciliationClient({
         </div>
 
         {saleDateSessions.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
             No sales recorded yet
           </div>
         ) : (
@@ -609,12 +609,12 @@ export function ReconciliationClient({
                   <tr
                     key={date}
                     onClick={() => setSelectedDate(date)}
-                    className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50" : "hover:bg-muted/40"}`}
+                    className={`cursor-pointer transition-colors ${isSelected ? "bg-primary/10" : "hover:bg-muted/40"}`}
                   >
                     <td className="px-6 py-3 font-medium whitespace-nowrap">
                       {formatDateLabel(date)}
                       {date === today && (
-                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 rounded px-1.5 py-0.5">Today</span>
+                        <span className="ml-2 text-xs bg-primary/15 text-primary rounded px-1.5 py-0.5">Today</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{sessionCount}</td>

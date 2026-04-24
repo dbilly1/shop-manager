@@ -104,9 +104,9 @@ interface Props {
 const TODAY = new Date().toISOString().split("T")[0]
 
 function paymentBadge(method: string) {
-  if (method === "cash") return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-[10px] px-1.5 py-0">Cash</Badge>
-  if (method === "mobile") return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 text-[10px] px-1.5 py-0">Mobile</Badge>
-  return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 text-[10px] px-1.5 py-0">Credit</Badge>
+  if (method === "cash") return <Badge className="bg-green-500/15 text-green-700 hover:bg-green-500/15 text-[10px] px-1.5 py-0">Cash</Badge>
+  if (method === "mobile") return <Badge className="bg-blue-500/15 text-blue-700 hover:bg-blue-500/15 text-[10px] px-1.5 py-0">Mobile</Badge>
+  return <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/15 text-[10px] px-1.5 py-0">Credit</Badge>
 }
 
 function getQtyDisplay(item: SaleItem) {
@@ -141,7 +141,7 @@ function SaleCard({
           <button
             onClick={onDelete}
             disabled={deletingId === sale.id}
-            className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
           >
             {deletingId === sale.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
           </button>
@@ -647,7 +647,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
           ) : (
             <div className="space-y-2">
               {lines.map((line, idx) => (
-                <div key={idx} className="rounded-lg border bg-slate-50 p-3">
+                <div key={idx} className="rounded-lg border bg-muted/40 p-3">
                   <div className="flex items-start justify-between mb-2.5">
                     <p className="font-medium text-sm">{line.product_name}</p>
                     <button
@@ -711,7 +711,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
         </div>
 
         {/* Footer (sticky, slate-50 bg) */}
-        <div className="border-t bg-slate-50 px-4 py-3 space-y-2.5 shrink-0">
+        <div className="border-t bg-muted/40 px-4 py-3 space-y-2.5 shrink-0">
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Subtotal</span>
             <span className="tabular-nums">{formatCurrency(subtotal, currency)}</span>
@@ -785,7 +785,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 className="h-8 text-xs flex-1"
               />
               {saleDate !== TODAY && (
-                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-[10px] shrink-0 px-1.5">
+                <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 text-[10px] shrink-0 px-1.5">
                   Backdated
                 </Badge>
               )}
@@ -980,7 +980,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                                   <button
                                     onClick={() => setDeleteConfirmId(sale.id)}
                                     disabled={deletingId === sale.id}
-                                    className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                    className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                                   >
                                     {deletingId === sale.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                                   </button>
@@ -1027,8 +1027,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                     {/* ── Direct Entries ── */}
                     {directSales.length > 0 && (
                       <div className="rounded-lg border overflow-hidden">
-                        <div className="px-4 py-2.5 bg-slate-50 border-b">
-                          <span className="text-xs font-semibold text-slate-600">
+                        <div className="px-4 py-2.5 bg-muted/40 border-b">
+                          <span className="text-xs font-semibold text-muted-foreground">
                             Direct {directSales.length === 1 ? "Entry" : `Entries · ${directSales.length} orders`}
                           </span>
                         </div>

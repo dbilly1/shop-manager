@@ -35,7 +35,6 @@ import {
   Tag,
   Trash2,
   ArrowUpDown,
-  Boxes,
   AlertTriangle,
   CircleOff,
   DollarSign,
@@ -43,6 +42,7 @@ import {
 import { toast } from "sonner";
 import type { SessionContext } from "@/types";
 import { canManageInventory } from "@/lib/permissions";
+import { useBranch } from "@/hooks/useBranch";
 
 const UNIT_TYPES = ["units", "kg"] as const;
 
@@ -146,7 +146,12 @@ export function InventoryClient({
   categories: initialCategories,
 }: Props) {
   const router = useRouter();
+  const { selectedBranchId } = useBranch();
   const canManage = canManageInventory(session.role!);
+  const canShopDelete = ["owner", "general_manager"].includes(session.role!);
+
+  // True when a shop-level user hasn't picked a specific branch in the topnav
+  const isAllBranchesView = !session.branch_id && !selectedBranchId;
 
   // ─── Categories state ───────────────────────────────────────────
   const [categories, setCategories] = useState<Category[]>(initialCategories);
@@ -199,7 +204,6 @@ export function InventoryClient({
 
   // ─── Filters ────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [filterBranch, setFilterBranch] = useState("all");
   type SortKey =
     | "name_asc"
     | "name_desc"
@@ -208,6 +212,10 @@ export function InventoryClient({
     | "best_selling"
     | "low_selling";
   const [sortKey, setSortKey] = useState<SortKey>("name_asc");
+
+  // ─── Deletion confirm state ──────────────────────────────────────
+  const [confirmAction, setConfirmAction] = useState<"branch" | "shop" | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   // ─── Add/Edit Product dialog ─────────────────────────────────────
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -239,23 +247,54 @@ export function InventoryClient({
   ]);
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  // ─── Base product list (aggregated in All-Branches view) ────────
+  const baseProducts = useMemo((): BranchProduct[] => {
+    if (isAllBranchesView) {
+      // One row per product — sum stock across all branches
+      const map = new Map<string, BranchProduct>();
+      for (const bp of branchProducts) {
+        if (!bp.product) continue;
+        const existing = map.get(bp.product.id);
+        if (existing) {
+          existing.current_stock_kg += bp.current_stock_kg;
+          existing.current_stock_units += bp.current_stock_units;
+          existing.current_stock_boxes += bp.current_stock_boxes;
+        } else {
+          map.set(bp.product.id, { ...bp }); // shallow copy
+        }
+      }
+      return Array.from(map.values());
+    }
+    if (session.branch_id) return branchProducts; // branch-scoped session
+    // Shop-level with a specific branch selected in topnav
+    return branchProducts.filter((bp) => bp.branch_id === selectedBranchId);
+  }, [branchProducts, isAllBranchesView, selectedBranchId, session.branch_id]);
+
+  // ─── Total stock for the product currently being edited ─────────
+  const totalStockForEditing = useMemo(() => {
+    if (!editingBp?.product) return 0;
+    return branchProducts
+      .filter((bp) => bp.product?.id === editingBp.product!.id)
+      .reduce((sum, bp) => sum + getStock(bp), 0);
+  }, [editingBp, branchProducts]);
+
   // ─── Summary stats ───────────────────────────────────────────────
   const stats = useMemo(() => {
-    const active = branchProducts.filter((bp) => bp.product).length;
-    const lowStock = branchProducts.filter(
+    const active = baseProducts.filter((bp) => bp.product).length;
+    const lowStock = baseProducts.filter(
       (bp) => bp.product && isLowStock(bp) && !isOutOfStock(bp),
     ).length;
-    const outOfStock = branchProducts.filter((bp) => isOutOfStock(bp)).length;
-    const totalValue = branchProducts.reduce((sum, bp) => {
+    const outOfStock = baseProducts.filter((bp) => isOutOfStock(bp)).length;
+    const totalValue = baseProducts.reduce((sum, bp) => {
       if (!bp.product) return sum;
       return sum + getStock(bp) * bp.product.cost_price;
     }, 0);
     return { active, lowStock, outOfStock, totalValue };
-  }, [branchProducts]);
+  }, [baseProducts]);
 
   // ─── Filtered rows ───────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let items = branchProducts.filter((bp) => {
+    let items = baseProducts.filter((bp) => {
       if (!bp.product) return false;
       const q = search.toLowerCase();
       if (
@@ -264,7 +303,6 @@ export function InventoryClient({
         !(bp.product.category ?? "").toLowerCase().includes(q)
       )
         return false;
-      if (filterBranch !== "all" && bp.branch_id !== filterBranch) return false;
       return true;
     });
     switch (sortKey) {
@@ -296,10 +334,16 @@ export function InventoryClient({
       default:
         return items;
     }
-  }, [branchProducts, search, filterBranch, sortKey]);
+  }, [baseProducts, search, sortKey]);
 
   // ─── Product dialog helpers ──────────────────────────────────────
   function openAddProduct() {
+    // Shop-level users must pick a branch first — "All Branches" would
+    // duplicate the product across every branch simultaneously.
+    if (!session.branch_id && !selectedBranchId) {
+      toast.error("Select a branch first — you're currently viewing all branches")
+      return
+    }
     setEditingBp(null);
     setPName("");
     setPCategory("");
@@ -316,13 +360,17 @@ export function InventoryClient({
   function openEditProduct(bp: BranchProduct) {
     if (!bp.product) return;
     setEditingBp(bp);
+    setConfirmAction(null);
     setPName(bp.product.name);
     setPCategory(bp.product.category ?? "");
     setPUnitType(bp.product.unit_type);
     setPUnitsPerBox(
       bp.product.units_per_box != null ? String(bp.product.units_per_box) : "",
     );
-    setPSellingPrice(String(bp.override_price ?? bp.product.base_price));
+    // In All Branches view there's no single override price; show base_price
+    setPSellingPrice(
+      String(isAllBranchesView ? bp.product.base_price : (bp.override_price ?? bp.product.base_price)),
+    );
     setPLowStockThreshold(String(bp.product.reorder_threshold));
     setProductDialogOpen(true);
   }
@@ -352,7 +400,8 @@ export function InventoryClient({
         setPSaving(false);
         return;
       }
-      if (editingBp.override_price !== null) {
+      // Only update branch-level override when editing from a specific branch
+      if (!isAllBranchesView && editingBp.override_price !== null) {
         await supabase
           .from("branch_products")
           .update({ override_price: parseFloat(pSellingPrice) })
@@ -381,8 +430,9 @@ export function InventoryClient({
         return;
       }
 
-      const branchList = session.branch_id
-        ? [{ id: session.branch_id }]
+      const targetBranchId = session.branch_id ?? selectedBranchId
+      const branchList = targetBranchId
+        ? [{ id: targetBranchId }]
         : branches;
       const openingQty = parseFloat(pOpeningQty) || 0;
       const openingBoxes = parseFloat(pOpeningBoxes) || 0;
@@ -407,6 +457,67 @@ export function InventoryClient({
     router.refresh();
   }
 
+  // ─── Branch-level removal ────────────────────────────────────────
+  async function removeFromBranch() {
+    if (!editingBp) return;
+    if (getStock(editingBp) > 0) {
+      toast.error("Zero out this branch's stock before removing the product");
+      setConfirmAction(null);
+      return;
+    }
+    setRemoving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("branch_products")
+      .update({ is_active: false })
+      .eq("id", editingBp.id);
+    setRemoving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Product removed from this branch");
+    setProductDialogOpen(false);
+    setConfirmAction(null);
+    router.refresh();
+  }
+
+  // ─── Shop-level discontinue / delete ─────────────────────────────
+  async function discontinueShopWide() {
+    if (!editingBp?.product) return;
+    if (totalStockForEditing > 0) {
+      toast.error("Stock must be zero across all branches before discontinuing");
+      setConfirmAction(null);
+      return;
+    }
+    setRemoving(true);
+    const supabase = createClient();
+    // Check if this product has any sales history
+    const { count } = await supabase
+      .from("sale_items")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", editingBp.product.id);
+
+    if ((count ?? 0) > 0) {
+      // Soft delete — preserve history
+      const { error } = await supabase
+        .from("products")
+        .update({ is_active: false })
+        .eq("id", editingBp.product.id);
+      if (error) { toast.error(error.message); setRemoving(false); return; }
+      toast.success("Product discontinued (hidden from active lists)");
+    } else {
+      // Hard delete — no history to preserve
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", editingBp.product.id);
+      if (error) { toast.error(error.message); setRemoving(false); return; }
+      toast.success("Product permanently deleted");
+    }
+    setRemoving(false);
+    setProductDialogOpen(false);
+    setConfirmAction(null);
+    router.refresh();
+  }
+
   // ─── Restock helpers ─────────────────────────────────────────────
   function openRestock(bp: BranchProduct) {
     setRestockBp(bp);
@@ -426,10 +537,6 @@ export function InventoryClient({
       return;
     }
     const costPerUnit = parseFloat(rCostPerUnit) || 0;
-    if (!costPerUnit) {
-      toast.error("Cost per unit is required");
-      return;
-    }
 
     setRSaving(true);
     const supabase = createClient();
@@ -452,19 +559,21 @@ export function InventoryClient({
       return;
     }
 
-    // Weighted-average cost price update
-    const currentStock =
-      ut === "kg" ? restockBp.current_stock_kg : restockBp.current_stock_units;
-    const oldCost = restockBp.product?.cost_price ?? 0;
-    const newAvgCost =
-      currentStock + totalPrimary > 0
-        ? (currentStock * oldCost + totalPrimary * costPerUnit) /
-          (currentStock + totalPrimary)
-        : costPerUnit;
-    await supabase
-      .from("products")
-      .update({ cost_price: newAvgCost })
-      .eq("id", restockBp.product!.id);
+    // Weighted-average cost price update — only if a cost was provided
+    if (costPerUnit > 0) {
+      const currentStock =
+        ut === "kg" ? restockBp.current_stock_kg : restockBp.current_stock_units;
+      const oldCost = restockBp.product?.cost_price ?? 0;
+      const newAvgCost =
+        currentStock + totalPrimary > 0
+          ? (currentStock * oldCost + totalPrimary * costPerUnit) /
+            (currentStock + totalPrimary)
+          : costPerUnit;
+      await supabase
+        .from("products")
+        .update({ cost_price: newAvgCost })
+        .eq("id", restockBp.product!.id);
+    }
 
     await supabase
       .from("restocks")
@@ -517,20 +626,10 @@ export function InventoryClient({
 
   async function saveBulkRestock() {
     const validRows = bulkRows.filter(
-      (r) =>
-        r.branch_product_id &&
-        (r.qty > 0 || r.boxes > 0) &&
-        r.cost_per_unit > 0,
+      (r) => r.branch_product_id && (r.qty > 0 || r.boxes > 0),
     );
-    const missingCost = bulkRows.some(
-      (r) => r.branch_product_id && (r.qty > 0 || r.boxes > 0) && !r.cost_per_unit,
-    );
-    if (missingCost) {
-      toast.error("Cost per unit is required for all rows");
-      return;
-    }
     if (validRows.length === 0) {
-      toast.error("Add at least one valid row with product, quantity and cost");
+      toast.error("Add at least one row with a product and quantity");
       return;
     }
     setBulkSaving(true);
@@ -553,19 +652,21 @@ export function InventoryClient({
         .update({ ...update, updated_at: new Date().toISOString() })
         .eq("id", bp.id);
 
-      // Weighted-average cost price update
-      const currentStock =
-        ut === "kg" ? bp.current_stock_kg : bp.current_stock_units;
-      const oldCost = bp.product?.cost_price ?? 0;
-      const newAvgCost =
-        currentStock + totalPrimary > 0
-          ? (currentStock * oldCost + totalPrimary * row.cost_per_unit) /
-            (currentStock + totalPrimary)
-          : row.cost_per_unit;
-      await supabase
-        .from("products")
-        .update({ cost_price: newAvgCost })
-        .eq("id", row.product_id);
+      // Weighted-average cost price update — only if a cost was provided
+      if (row.cost_per_unit > 0) {
+        const currentStock =
+          ut === "kg" ? bp.current_stock_kg : bp.current_stock_units;
+        const oldCost = bp.product?.cost_price ?? 0;
+        const newAvgCost =
+          currentStock + totalPrimary > 0
+            ? (currentStock * oldCost + totalPrimary * row.cost_per_unit) /
+              (currentStock + totalPrimary)
+            : row.cost_per_unit;
+        await supabase
+          .from("products")
+          .update({ cost_price: newAvgCost })
+          .eq("id", row.product_id);
+      }
 
       await supabase
         .from("restocks")
@@ -625,25 +726,6 @@ export function InventoryClient({
           </SelectContent>
         </Select>
 
-        {branches.length > 0 && (
-          <Select
-            value={filterBranch}
-            onValueChange={(v) => setFilterBranch(v ?? "all")}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Branches</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
         <div className="flex-1" />
 
         {canManage && (
@@ -682,7 +764,7 @@ export function InventoryClient({
               </p>
               <p className="text-2xl font-bold">{stats.active}</p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
               <Package className="h-5 w-5 text-blue-500" />
             </div>
           </CardContent>
@@ -698,7 +780,7 @@ export function InventoryClient({
               </p>
             </div>
             <div
-              className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stats.lowStock > 0 ? "bg-amber-50" : "bg-muted"}`}
+              className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stats.lowStock > 0 ? "bg-amber-500/10" : "bg-muted"}`}
             >
               <AlertTriangle
                 className={`h-5 w-5 ${stats.lowStock > 0 ? "text-amber-500" : "text-muted-foreground"}`}
@@ -717,7 +799,7 @@ export function InventoryClient({
               </p>
             </div>
             <div
-              className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stats.outOfStock > 0 ? "bg-red-50" : "bg-muted"}`}
+              className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stats.outOfStock > 0 ? "bg-red-500/10" : "bg-muted"}`}
             >
               <CircleOff
                 className={`h-5 w-5 ${stats.outOfStock > 0 ? "text-red-500" : "text-muted-foreground"}`}
@@ -735,7 +817,7 @@ export function InventoryClient({
                 {formatCurrency(stats.totalValue, currency)}
               </p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
               <DollarSign className="h-5 w-5 text-green-500" />
             </div>
           </CardContent>
@@ -865,15 +947,15 @@ export function InventoryClient({
                       {/* Status badge */}
                       <td className="px-4 py-3.5">
                         {out ? (
-                          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 text-xs">
+                          <Badge className="bg-red-500/15 text-red-600 hover:bg-red-500/15 text-xs">
                             Out
                           </Badge>
                         ) : low ? (
-                          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-xs">
+                          <Badge className="bg-amber-500/15 text-amber-600 hover:bg-amber-500/15 text-xs">
                             Low
                           </Badge>
                         ) : (
-                          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+                          <Badge className="bg-green-500/15 text-green-600 hover:bg-green-500/15 text-xs">
                             OK
                           </Badge>
                         )}
@@ -890,9 +972,15 @@ export function InventoryClient({
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => openRestock(bp)}
-                              title="Add stock"
-                              className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                if (isAllBranchesView) {
+                                  toast.error("Select a branch in the top bar to restock");
+                                  return;
+                                }
+                                openRestock(bp);
+                              }}
+                              title={isAllBranchesView ? "Select a branch to restock" : "Add stock"}
+                              className={`h-7 w-7 rounded flex items-center justify-center transition-colors ${isAllBranchesView ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
                             >
                               <PlusCircle className="h-3.5 w-3.5" />
                             </button>
@@ -1131,8 +1219,7 @@ export function InventoryClient({
                   parseFloat(pOpeningBoxes) > 0) && (
                   <div className="space-y-1.5">
                     <Label className="text-xs">
-                      Cost Price (per {pUnitType === "kg" ? "kg" : "unit"}){" "}
-                      <span className="text-destructive">*</span>
+                      Cost Price (per {pUnitType === "kg" ? "kg" : "unit"})
                     </Label>
                     <Input
                       type="number"
@@ -1158,6 +1245,103 @@ export function InventoryClient({
                       {pUnitType === "kg" ? "kg" : "units"}
                     </p>
                   )}
+              </div>
+            )}
+
+            {/* ── Danger zone (edit mode only) ── */}
+            {editingBp && (canManage || canShopDelete) && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Danger Zone
+                </p>
+
+                {/* Branch-level removal — only when viewing a specific branch */}
+                {canManage && !isAllBranchesView && (
+                  confirmAction === "branch" ? (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                      <p className="text-xs text-foreground">
+                        {getStock(editingBp) > 0
+                          ? `Cannot remove — ${stockDisplay(editingBp).text} still in stock. Zero out stock first.`
+                          : "Remove this product from this branch? This can be reversed by an admin."}
+                      </p>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setConfirmAction(null)}
+                          disabled={removing}
+                        >
+                          Cancel
+                        </Button>
+                        {getStock(editingBp) === 0 && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={removeFromBranch}
+                            disabled={removing}
+                          >
+                            {removing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setConfirmAction("branch")}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Remove from this branch
+                    </Button>
+                  )
+                )}
+
+                {/* Shop-level discontinue — owner / general_manager only */}
+                {canShopDelete && (
+                  confirmAction === "shop" ? (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                      <p className="text-xs text-foreground">
+                        {totalStockForEditing > 0
+                          ? `Cannot discontinue — ${totalStockForEditing} units / kg still across branches. Zero all branch stock first.`
+                          : "Discontinue this product across all branches? If it has sales history it will be hidden; otherwise permanently deleted."}
+                      </p>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setConfirmAction(null)}
+                          disabled={removing}
+                        >
+                          Cancel
+                        </Button>
+                        {totalStockForEditing === 0 && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={discontinueShopWide}
+                            disabled={removing}
+                          >
+                            {removing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            Confirm
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setConfirmAction("shop")}
+                    >
+                      <CircleOff className="mr-1.5 h-3.5 w-3.5" />
+                      Discontinue shop-wide
+                    </Button>
+                  )
+                )}
               </div>
             )}
 
@@ -1238,8 +1422,7 @@ export function InventoryClient({
                 )}
               <div className="space-y-1.5">
                 <Label>
-                  Cost Price per Unit{" "}
-                  <span className="text-destructive">*</span>
+                  Cost Price per Unit
                 </Label>
                 <Input
                   type="number"
