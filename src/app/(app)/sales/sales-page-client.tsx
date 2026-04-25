@@ -99,6 +99,7 @@ interface Props {
   currency: string
   session: SessionContext
   branches: { id: string; name: string }[]
+  activeBranchId?: string | null
 }
 
 const TODAY = new Date().toISOString().split("T")[0]
@@ -345,7 +346,7 @@ function EditSaleDialog({
   )
 }
 
-export function SalesPageClient({ summaries, branchProducts, customers: initialCustomers, currency, session, branches }: Props) {
+export function SalesPageClient({ summaries, branchProducts, customers: initialCustomers, currency, session, branches, activeBranchId }: Props) {
   const router = useRouter()
   const isSalesperson = session.role === "salesperson"
   const canBackdate = session.role ? canBackdateSales(session.role) : false
@@ -358,7 +359,9 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [saleDate, setSaleDate] = useState(TODAY)
   const [notes, setNotes] = useState("")
   const [saleDiscount, setSaleDiscount] = useState(0)
-  const [selectedBranchId, setSelectedBranchId] = useState(session.branch_id ?? "")
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    session.branch_id ?? activeBranchId ?? "",
+  )
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)

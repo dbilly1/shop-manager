@@ -80,6 +80,7 @@ interface Props {
   currency: string;
   session: SessionContext;
   branches: { id: string; name: string }[];
+  activeBranchId?: string | null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -89,12 +90,13 @@ export function ExpensesClient({
   currency,
   session,
   branches,
+  activeBranchId,
 }: Props) {
   const router = useRouter();
 
-  // Resolved branch: fixed for branch-scoped users, selectable for shop-level users
+  // Resolved branch: fixed for branch-scoped users, pre-filled from topnav for shop-level users
   const [selectedBranchId, setSelectedBranchId] = useState(
-    session.branch_id ?? branches[0]?.id ?? "",
+    session.branch_id ?? activeBranchId ?? "",
   );
 
   // ── local state ────────────────────────────────────────────────────────────

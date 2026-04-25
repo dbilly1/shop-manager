@@ -113,6 +113,7 @@ export default async function ReconciliationPage() {
       tolerance={shop?.recon_tolerance ?? 0}
       session={session}
       branches={branches}
+      activeBranchId={activeBranchId}
     />
   )
 }

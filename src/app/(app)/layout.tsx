@@ -168,9 +168,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const selectedBranch = branches.find((b) => b.id === selectedBranchId) ?? null
 
-  // Wraps the raw state setter: also writes the sm_branch cookie so every
-  // subsequent page navigation picks up the new branch server-side, then
-  // refreshes the current page so its RSC re-runs with the updated cookie.
+  // Set the cookie then do a full reload so every page re-renders from the
+  // server with the correct branch — simple, race-condition-free.
   function handleSetBranch(id: string | null) {
     setSelectedBranchId(id)
     if (id) {
@@ -178,7 +177,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } else {
       document.cookie = `sm_branch=; path=/; max-age=0; SameSite=Lax`
     }
-    router.refresh()
+    window.location.reload()
   }
 
   return (

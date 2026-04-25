@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 import { redirect } from "next/navigation"
 import { ReportsClient } from "./reports-client"
 
@@ -8,6 +9,7 @@ export default async function ReportsPage() {
   if (!session) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   // Default: last 30 days
   const endDate = new Date().toISOString().split("T")[0]
@@ -19,7 +21,7 @@ export default async function ReportsPage() {
     .eq("shop_id", session.shop_id!)
     .gte("sale_date", startDate)
     .lte("sale_date", endDate)
-  if (session.branch_id) salesQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) salesQuery.eq("branch_id", activeBranchId)
   const { data: sales } = await salesQuery
 
   const expensesQuery = supabase
@@ -28,20 +30,22 @@ export default async function ReportsPage() {
     .eq("shop_id", session.shop_id!)
     .gte("expense_date", startDate)
     .lte("expense_date", endDate)
-  if (session.branch_id) expensesQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) expensesQuery.eq("branch_id", activeBranchId)
   const { data: expenses } = await expensesQuery
 
   const saleItemsQuery = supabase
     .from("sale_items")
     .select("product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, cost_price_at_sale, product:products(name)")
     .eq("shop_id", session.shop_id!)
-  if (session.branch_id) saleItemsQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) saleItemsQuery.eq("branch_id", activeBranchId)
   const { data: saleItems } = await saleItemsQuery
 
-  const { data: creditData } = await supabase
+  const creditQuery = supabase
     .from("credit_sales")
     .select("balance, amount_paid")
     .eq("shop_id", session.shop_id!)
+  if (activeBranchId) creditQuery.eq("branch_id", activeBranchId)
+  const { data: creditData } = await creditQuery
 
   const { data: shop } = await supabase.from("shops").select("currency").eq("id", session.shop_id!).single()
 

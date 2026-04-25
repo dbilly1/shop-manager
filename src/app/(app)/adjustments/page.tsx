@@ -3,12 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { AdjustmentsClient } from "./adjustments-client"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 
 export default async function AdjustmentsPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   const query = supabase
     .from("stock_adjustments")
@@ -17,7 +19,7 @@ export default async function AdjustmentsPage() {
     .order("created_at", { ascending: false })
     .limit(200)
 
-  if (session.branch_id) query.eq("branch_id", session.branch_id)
+  if (activeBranchId) query.eq("branch_id", activeBranchId)
 
   const { data: adjustments } = await query
 
@@ -27,7 +29,7 @@ export default async function AdjustmentsPage() {
     .eq("shop_id", session.shop_id!)
     .eq("is_active", true)
 
-  if (session.branch_id) bpQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) bpQuery.eq("branch_id", activeBranchId)
   const { data: branchProducts } = await bpQuery
 
   const { data: shop } = await supabase

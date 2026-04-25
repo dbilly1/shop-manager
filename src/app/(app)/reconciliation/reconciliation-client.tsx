@@ -46,6 +46,7 @@ interface Props {
   tolerance: number
   session: SessionContext
   branches: { id: string; name: string }[]
+  activeBranchId?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -97,10 +98,12 @@ export function ReconciliationClient({
   tolerance,
   session,
   branches,
+  activeBranchId,
 }: Props) {
   const router = useRouter()
   const today = todayISO()
-  const branchId = session.branch_id ?? branches[0]?.id ?? null
+  // Use the topnav-selected branch for all queries and form submissions
+  const branchId = session.branch_id ?? activeBranchId ?? null
 
   const [reconciliations, setReconciliations] = useState<ReconRecord[]>(initialReconciliations)
   const [selectedDate, setSelectedDate] = useState(today)
@@ -123,7 +126,7 @@ export function ReconciliationClient({
         .select("batch_id, payment_method, total_amount, created_at")
         .eq("shop_id", session.shop_id)
         .eq("sale_date", date)
-      if (session.branch_id) salesQ.eq("branch_id", session.branch_id)
+      if (branchId) salesQ.eq("branch_id", branchId)
       const { data: salesData } = await salesQ
 
       if (!salesData || salesData.length === 0) {
@@ -139,7 +142,7 @@ export function ReconciliationClient({
         .eq("shop_id", session.shop_id)
         .eq("payment_method", "cash")
         .eq("payment_date", date)
-      if (session.branch_id) paymentsQ.eq("branch_id", session.branch_id)
+      if (branchId) paymentsQ.eq("branch_id", branchId)
       const { data: paymentsData } = await paymentsQ
       const totalCreditRepayments = (paymentsData ?? []).reduce((s, p) => s + p.amount, 0)
 
@@ -150,7 +153,7 @@ export function ReconciliationClient({
         .eq("shop_id", session.shop_id)
         .eq("expense_date", date)
         .eq("payment_method", "cash")
-      if (session.branch_id) expQ.eq("branch_id", session.branch_id)
+      if (branchId) expQ.eq("branch_id", branchId)
       const { data: expData } = await expQ
 
       // Existing reconciliations for this date
@@ -227,7 +230,7 @@ export function ReconciliationClient({
     } finally {
       setLoadingSessions(false)
     }
-  }, [session.shop_id, session.branch_id, reconciliations])
+  }, [session.shop_id, branchId, reconciliations])
 
   useEffect(() => {
     loadSessions(selectedDate)

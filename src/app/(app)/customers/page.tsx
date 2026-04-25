@@ -2,12 +2,14 @@ import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { CustomersClient } from "./customers-client"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 
 export default async function CustomersPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   const query = supabase
     .from("customers")
@@ -15,7 +17,7 @@ export default async function CustomersPage() {
     .eq("shop_id", session.shop_id!)
     .order("name")
 
-  if (session.branch_id) query.eq("branch_id", session.branch_id)
+  if (activeBranchId) query.eq("branch_id", activeBranchId)
   const { data: customers } = await query
 
   // Get outstanding credit per customer

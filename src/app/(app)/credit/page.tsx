@@ -2,12 +2,14 @@ import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { CreditClient } from "./credit-client"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 
 export default async function CreditPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   const csQuery = supabase
     .from("credit_sales")
@@ -16,7 +18,7 @@ export default async function CreditPage() {
     .gt("balance", 0)
     .order("created_at", { ascending: false })
 
-  if (session.branch_id) csQuery.eq("branch_id", session.branch_id)
+  if (activeBranchId) csQuery.eq("branch_id", activeBranchId)
 
   const { data: creditSales } = await csQuery
   const { data: shop } = await supabase.from("shops").select("currency, credit_overdue_days").eq("id", session.shop_id!).single()

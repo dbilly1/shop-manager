@@ -2,12 +2,14 @@ import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { AuditLogClient } from "./audit-log-client"
+import { getActiveBranchId } from "@/lib/branch-cookie"
 
 export default async function AuditPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
 
   const supabase = await createClient()
+  const activeBranchId = await getActiveBranchId(session.branch_id)
 
   const query = supabase
     .from("audit_log")
@@ -16,7 +18,7 @@ export default async function AuditPage() {
     .order("created_at", { ascending: false })
     .limit(200)
 
-  if (session.branch_id) query.eq("branch_id", session.branch_id)
+  if (activeBranchId) query.eq("branch_id", activeBranchId)
 
   const { data: logs } = await query
 
