@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Playfair_Display, DM_Sans, DM_Mono } from "next/font/google"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -158,11 +159,11 @@ export default async function LandingPage() {
         backdropFilter: "blur(12px)",
       }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1.5rem", height: "60px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <a href="/" style={{ textDecoration: "none" }}>
+          <Link href="/" style={{ textDecoration: "none" }}>
             <span className="lp-serif" style={{ fontSize: "1.2rem", color: C.ivoryLight, fontWeight: 400, letterSpacing: "-0.01em" }}>
               Shop<strong style={{ fontWeight: 700 }}>Manager</strong>
             </span>
-          </a>
+          </Link>
           <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
             <a href="#features" className="lp-nav-link">Features</a>
             <a href="#pricing" className="lp-nav-link">Pricing</a>

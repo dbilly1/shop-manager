@@ -45,7 +45,6 @@ interface Props {
   currency: string
   tolerance: number
   session: SessionContext
-  branches: { id: string; name: string }[]
   activeBranchId?: string | null
 }
 
@@ -97,7 +96,6 @@ export function ReconciliationClient({
   currency,
   tolerance,
   session,
-  branches,
   activeBranchId,
 }: Props) {
   const router = useRouter()

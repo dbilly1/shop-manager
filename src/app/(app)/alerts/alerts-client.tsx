@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatDateTime } from "@/utils/format"
-import { Bell, AlertTriangle, Package, CreditCard, CheckCircle2, Clock, XCircle } from "lucide-react"
+import { Bell, AlertTriangle, Package, CreditCard, CheckCircle2, Clock } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, AlertType, AlertStatus } from "@/types"
 
@@ -34,7 +34,7 @@ interface Props {
   session: SessionContext
 }
 
-export function AlertsClient({ alerts, session }: Props) {
+export function AlertsClient({ alerts }: Props) {
   const router = useRouter()
   const [updating, setUpdating] = useState<string | null>(null)
 

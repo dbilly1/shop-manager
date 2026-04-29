@@ -26,7 +26,7 @@ export async function POST(
 
   if (error || !invite) return NextResponse.json({ error: error?.message ?? "Not found" }, { status: 400 })
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").trim()
   const inviteLink = `${appUrl}/invite/${newToken}`
 
   const { data: shop } = await admin.from("shops").select("name").eq("id", invite.shop_id).single()
@@ -38,5 +38,5 @@ export async function POST(
     role: invite.role,
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, invite_link: inviteLink })
 }

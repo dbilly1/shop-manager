@@ -39,7 +39,7 @@ export default async function SettingsPage() {
       shop={shop}
       branches={branches ?? []}
       subscription={subscription}
-      allPlans={(allPlans ?? []) as any}
+      allPlans={(allPlans ?? []) as unknown as Parameters<typeof SettingsClient>[0]["allPlans"]}
       usage={{ users: userCount ?? 0, branches: branchCount ?? 0, products: productCount ?? 0, customers: customerCount ?? 0 }}
       session={session}
     />

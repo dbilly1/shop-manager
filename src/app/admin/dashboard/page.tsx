@@ -1,9 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { StatCard } from "@/components/shared/stat-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Users, TrendingUp, AlertTriangle } from "lucide-react"
+import { Building2, Users, TrendingUp } from "lucide-react"
 import { formatDate } from "@/utils/format"
 
 export default async function AdminDashboardPage() {

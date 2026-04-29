@@ -56,11 +56,11 @@ function Select<Value = string>({
 
   // Rebuild the label map synchronously during every render so it is always
   // current before any child (SelectValue) reads it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useMemo(() => {
     if (externalItems != null || externalITSL != null) return; // caller owns labeling
     const map = new Map<string, string>();
     scanLabels(children as React.ReactNode, map);
+    // eslint-disable-next-line react-hooks/refs
     labelMapRef.current = map;
   }, [children, externalItems, externalITSL]);
 

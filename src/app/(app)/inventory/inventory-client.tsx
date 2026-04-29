@@ -294,7 +294,7 @@ export function InventoryClient({
 
   // ─── Filtered rows ───────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let items = baseProducts.filter((bp) => {
+    const items = baseProducts.filter((bp) => {
       if (!bp.product) return false;
       const q = search.toLowerCase();
       if (

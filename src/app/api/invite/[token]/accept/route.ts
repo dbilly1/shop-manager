@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
-  const { password } = await req.json()
+
+  // The user must be signed in — their ID is used for the membership
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: "Please sign in before activating your account" }, { status: 401 })
+  }
+
   const admin = createAdminClient()
 
   // Validate invite
@@ -22,47 +30,35 @@ export async function POST(
     return NextResponse.json({ error: "Invite not found or expired" }, { status: 404 })
   }
 
-  // Create or get user
-  const { data: existingUsers } = await admin.auth.admin.listUsers()
-  const existingUser = existingUsers?.users.find((u) => u.email === invite.email)
-
-  let userId: string
-
-  if (existingUser) {
-    // Update password
-    await admin.auth.admin.updateUserById(existingUser.id, { password })
-    userId = existingUser.id
-  } else {
-    // Create user
-    const { data: newUser, error: createError } = await admin.auth.admin.createUser({
-      email: invite.email,
-      password,
-      email_confirm: true,
-    })
-    if (createError || !newUser.user) {
-      return NextResponse.json({ error: createError?.message ?? "Failed to create user" }, { status: 500 })
-    }
-    userId = newUser.user.id
+  // Verify the signed-in user's email matches the invite
+  if (user.email?.toLowerCase() !== invite.email?.toLowerCase()) {
+    return NextResponse.json(
+      { error: `This invite is for ${invite.email}. Please sign in with that account.` },
+      { status: 403 }
+    )
   }
 
-  // Create shop_member
-  const { error: memberError } = await admin.from("shop_members").upsert({
-    shop_id: invite.shop_id,
-    branch_id: invite.branch_id,
-    user_id: userId,
-    role: invite.role,
-    invited_by: invite.invited_by,
-    status: "active",
-  }, { onConflict: "shop_id,user_id" })
+  // Activate shop membership
+  const { error: memberError } = await admin.from("shop_members").upsert(
+    {
+      shop_id: invite.shop_id,
+      branch_id: invite.branch_id,
+      user_id: user.id,
+      role: invite.role,
+      invited_by: invite.invited_by,
+      status: "active",
+    },
+    { onConflict: "shop_id,user_id" }
+  )
 
   if (memberError) {
     return NextResponse.json({ error: memberError.message }, { status: 500 })
   }
 
-  // Mark invite accepted
+  // Mark invite accepted and scrub the temporary password
   await admin
     .from("shop_invites")
-    .update({ accepted_at: new Date().toISOString() })
+    .update({ accepted_at: new Date().toISOString(), temp_password: null })
     .eq("id", invite.id)
 
   return NextResponse.json({ success: true })

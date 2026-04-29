@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { LinkButton } from "@/components/ui/link-button"
 import { formatCurrency, formatDate, formatPaymentMethod } from "@/utils/format"
-import { ShoppingCart, Receipt, Sliders, TrendingUp, AlertTriangle, Users } from "lucide-react"
+import { ShoppingCart, Receipt, Sliders, TrendingUp, AlertTriangle } from "lucide-react"
 import type { SessionContext } from "@/types"
 import { DailyChart } from "./daily-chart"
 

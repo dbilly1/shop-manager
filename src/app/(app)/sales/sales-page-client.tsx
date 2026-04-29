@@ -403,6 +403,9 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setTodayLoading(false)
   }, [isSalesperson, fetchSalesForDate])
 
+  // Legitimate fetch-on-mount: load today's sales for the salesperson view.
+  // The setState calls inside loadTodaySales are intentional (loading state + data).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadTodaySales() }, [loadTodaySales])
 
   async function handleDateClick(date: string) {

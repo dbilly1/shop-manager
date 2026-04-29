@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/utils/format"
 import { Plus, Trash2, Loader2, ShoppingCart } from "lucide-react"
 import { toast } from "sonner"
@@ -128,31 +127,9 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
 
     const supabase = createClient()
 
-    const { data: sale, error: saleError } = await supabase
-      .from("sales")
-      .insert({
-        shop_id: session.shop_id,
-        branch_id: branchId,
-        sale_date: saleDate,
-        total_amount: total,
-        payment_method: paymentMethod,
-        customer_id: customerId || null,
-        recorded_by: session.user_id,
-      })
-      .select()
-      .single()
-
-    if (saleError || !sale) {
-      setError(saleError?.message ?? "Failed to create sale")
-      setLoading(false)
-      return
-    }
-
-    // Insert sale items
+    // Build items payload for the atomic RPC
     const items = lines.map((l) => ({
-      sale_id: sale.id,
-      shop_id: session.shop_id,
-      branch_id: branchId,
+      branch_product_id: l.branch_product_id,
       product_id: l.product_id,
       quantity_kg: l.unit_type === "kg" ? l.quantity : 0,
       quantity_units: l.unit_type === "units" ? l.quantity : 0,
@@ -163,35 +140,23 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
       cost_price_at_sale: l.cost_price,
     }))
 
-    const { error: itemsError } = await supabase.from("sale_items").insert(items)
-    if (itemsError) {
-      setError(itemsError.message)
+    const { error: rpcError } = await supabase.rpc("create_sale_with_items", {
+      p_shop_id: session.shop_id,
+      p_branch_id: branchId,
+      p_sale_date: saleDate,
+      p_total_amount: total,
+      p_payment_method: paymentMethod,
+      p_customer_id: customerId || null,
+      p_recorded_by: session.user_id,
+      p_recorded_by_name: session.full_name ?? null,
+      p_notes: null,
+      p_items: items,
+    })
+
+    if (rpcError) {
+      setError(rpcError.message)
       setLoading(false)
       return
-    }
-
-    // Decrement stock
-    for (const l of lines) {
-      const bp = branchProducts.find((p) => p.id === l.branch_product_id)
-      if (!bp) continue
-      const update: Record<string, number> = {}
-      if (l.unit_type === "kg") update.current_stock_kg = Math.max(0, bp.current_stock_kg - l.quantity)
-      else if (l.unit_type === "boxes") update.current_stock_boxes = Math.max(0, bp.current_stock_boxes - l.quantity)
-      else update.current_stock_units = Math.max(0, bp.current_stock_units - l.quantity)
-      await supabase.from("branch_products").update({ ...update, updated_at: new Date().toISOString() }).eq("id", bp.id)
-    }
-
-    // Create credit sale record if credit
-    if (paymentMethod === "credit" && customerId) {
-      await supabase.from("credit_sales").insert({
-        shop_id: session.shop_id,
-        branch_id: branchId,
-        sale_id: sale.id,
-        customer_id: customerId,
-        amount_owed: total,
-        amount_paid: 0,
-        balance: total,
-      })
     }
 
     toast.success("Sale recorded successfully")

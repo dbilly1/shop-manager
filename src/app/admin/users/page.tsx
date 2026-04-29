@@ -26,10 +26,14 @@ export default async function AdminUsersPage() {
     .order("created_at", { ascending: false })
     .limit(100)
 
+  // Supabase types nested selects as arrays — coerce to single objects for the client
+  type SbMember = { id: string; user_id: string; role: string; status: string; created_at: string; shop: { name: string } | null; branch: { name: string } | null }
+  type SbInvite = { id: string; email: string; role: string; expires_at: string; created_at: string; shop: { name: string } | null; branch: { name: string } | null }
+
   return (
     <AdminUsersClient
-      members={(members ?? []) as any}
-      invites={(invites ?? []) as any}
+      members={(members ?? []) as unknown as SbMember[]}
+      invites={(invites ?? []) as unknown as SbInvite[]}
     />
   )
 }

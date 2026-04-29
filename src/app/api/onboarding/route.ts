@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isValidCurrency, DEFAULT_CURRENCY } from "@/lib/constants"
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -11,6 +12,11 @@ export async function POST(req: NextRequest) {
 
   if (!shopName?.trim() || !branchName?.trim()) {
     return NextResponse.json({ error: "Shop name and branch name are required" }, { status: 400 })
+  }
+
+  const normalizedCurrency = (currency ?? DEFAULT_CURRENCY).toUpperCase()
+  if (!isValidCurrency(normalizedCurrency)) {
+    return NextResponse.json({ error: `Unsupported currency: ${currency}` }, { status: 400 })
   }
 
   const admin = createAdminClient()
@@ -36,7 +42,7 @@ export async function POST(req: NextRequest) {
     type: shopType ?? "general",
     owner_id: user.id,
     plan_id: freePlan?.id ?? null,
-    currency: currency ?? "USD",
+    currency: normalizedCurrency,
     country: "US",
     timezone: "UTC",
   }).select().single()

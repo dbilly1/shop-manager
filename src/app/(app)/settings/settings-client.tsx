@@ -112,27 +112,21 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
 
   async function handleUpgrade(planId: string) {
     setUpgrading(planId)
-    const supabase = createClient()
 
-    const [{ error: subError }, { error: shopError }] = await Promise.all([
-      supabase
-        .from("shop_subscriptions")
-        .update({ plan_id: planId, status: "active" })
-        .eq("shop_id", session.shop_id!),
-      supabase
-        .from("shops")
-        .update({ plan_id: planId })
-        .eq("id", session.shop_id!),
-    ])
+    const res = await fetch("/api/settings/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: planId }),
+    })
+    const data = await res.json()
 
-    const error = subError ?? shopError
-    if (error) {
-      toast.error(error.message)
+    if (!res.ok) {
+      toast.error(data.error ?? "Plan update failed")
       setUpgrading(null)
     } else {
       toast.success("Plan updated")
       setUpgradeOpen(false)
-      window.location.reload()
+      router.refresh()
     }
   }
 

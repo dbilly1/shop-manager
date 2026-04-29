@@ -11,7 +11,8 @@ export default async function SalesPage() {
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
-  const ninetyDaysAgo = new Date(Date.now() - 89 * 86400000).toISOString().split("T")[0]
+  const now = new Date()
+  const ninetyDaysAgo = new Date(now.getTime() - 89 * 86400000).toISOString().split("T")[0]
 
   // Sales (last 90 days)
   const salesQuery = supabase
@@ -73,10 +74,20 @@ export default async function SalesPage() {
     branches = data ?? []
   }
 
+  type SbBranchProduct = {
+    id: string
+    branch_id: string
+    override_price: number | null
+    current_stock_kg: number
+    current_stock_units: number
+    current_stock_boxes: number
+    product: { id: string; name: string; unit_type: string; base_price: number; cost_price: number } | null
+  }
+
   return (
     <SalesPageClient
       summaries={summaries}
-      branchProducts={(branchProducts ?? []) as any}
+      branchProducts={(branchProducts ?? []) as unknown as SbBranchProduct[]}
       customers={customers ?? []}
       currency={shop?.currency ?? "USD"}
       session={session}

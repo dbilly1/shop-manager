@@ -1,17 +1,22 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Loader2 } from "lucide-react"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
+  const searchParams = useSearchParams()
+  const initialEmail = searchParams.get("email") ?? ""
+  const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  const isInvited =
+    searchParams.get("invited") === "1" || !!searchParams.get("invite_token")
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -27,6 +32,18 @@ export default function LoginPage() {
       return
     }
 
+    // If this login came from an invite link, activate the membership now
+    const inviteToken = searchParams.get("invite_token")
+    if (inviteToken) {
+      const res = await fetch(`/api/invite/${inviteToken}/accept`, { method: "POST" })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Invite activation failed — contact your manager.")
+        setLoading(false)
+        return
+      }
+    }
+
     router.push("/dashboard")
     router.refresh()
   }
@@ -35,10 +52,12 @@ export default function LoginPage() {
     <>
       <div style={{ marginBottom: "1.5rem" }}>
         <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "#f5f1ea", margin: 0, marginBottom: "0.25rem" }}>
-          Welcome back
+          {isInvited ? "Account activated!" : "Welcome back"}
         </h2>
         <p style={{ fontSize: "0.85rem", color: "rgba(232,226,212,0.45)", margin: 0 }}>
-          Sign in to your account to continue
+          {isInvited
+            ? "Sign in with the temporary password your manager gave you."
+            : "Sign in to your account to continue"}
         </p>
       </div>
 
@@ -96,5 +115,13 @@ export default function LoginPage() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: 180 }} />}>
+      <LoginForm />
+    </Suspense>
   )
 }

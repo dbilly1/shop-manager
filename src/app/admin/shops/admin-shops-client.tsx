@@ -187,7 +187,7 @@ export function AdminShopsClient({ shops, plans }: Props) {
           <DialogHeader><DialogTitle>Create Shop</DialogTitle></DialogHeader>
           {inviteLink ? (
             <div className="space-y-4">
-              <p className="text-sm">Shop created. The owner email wasn't found in the system, so an invite was sent. Copy the link below if needed:</p>
+              <p className="text-sm">Shop created. The owner email wasn&apos;t found in the system, so an invite was sent. Copy the link below if needed:</p>
               <Input value={inviteLink} readOnly onClick={(e) => (e.target as HTMLInputElement).select()} />
               <Button className="w-full" onClick={() => { setCreateOpen(false); resetForm(); router.refresh() }}>Done</Button>
             </div>
@@ -201,7 +201,7 @@ export function AdminShopsClient({ shops, plans }: Props) {
               <div className="space-y-2">
                 <Label>Owner Email <span className="text-destructive">*</span></Label>
                 <Input type="email" value={newOwnerEmail} onChange={(e) => setNewOwnerEmail(e.target.value)} placeholder="owner@example.com" />
-                <p className="text-xs text-muted-foreground">If the user doesn't have an account yet, an invite link will be generated.</p>
+                <p className="text-xs text-muted-foreground">If the user doesn&apos;t have an account yet, an invite link will be generated.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">

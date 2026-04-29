@@ -25,35 +25,55 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  // Always refresh the session via getUser
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
 
-  // Public routes that don't require auth
-  const publicRoutes = ["/", "/login", "/signup", "/invite"]
-  const isPublicRoute = publicRoutes.some(
-    (r) => pathname === r || pathname.startsWith("/invite/")
-  )
+  // ── Public routes (no auth required) ────────────────────────────────────────
+  const isPublicRoute =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/api/invite/") ||
+    pathname.startsWith("/api/webhooks/") ||
+    pathname.startsWith("/api/onboarding")
 
-  // Admin routes
-  const isAdminRoute = pathname.startsWith("/admin")
-
+  // ── Unauthenticated user trying to access protected route → /login ──────────
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     return NextResponse.redirect(url)
   }
 
+  // ── Authenticated user on /login or /signup → dashboard ─────────────────────
+  // (skip if there's an invite_token query param — login uses it to activate)
   if (user && (pathname === "/login" || pathname === "/signup")) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
-    return NextResponse.redirect(url)
+    if (!request.nextUrl.searchParams.get("invite_token")) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/dashboard"
+      url.search = ""
+      return NextResponse.redirect(url)
+    }
   }
 
-  // For admin routes, we verify super_admin status in the route handler itself
-  // Middleware just ensures user is logged in
+  // ── Admin route guard ───────────────────────────────────────────────────────
+  if (user && pathname.startsWith("/admin")) {
+    const { data: superAdmin } = await supabase
+      .from("super_admins")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (!superAdmin) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/dashboard"
+      return NextResponse.redirect(url)
+    }
+  }
 
   return supabaseResponse
 }

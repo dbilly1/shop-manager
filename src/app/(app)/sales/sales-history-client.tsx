@@ -4,11 +4,9 @@ import { useState } from "react"
 import Link from "next/link"
 import { LinkButton } from "@/components/ui/link-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { formatCurrency, formatDate } from "@/utils/format"
 import { Plus, Search, ChevronRight } from "lucide-react"
-import type { SessionContext } from "@/types"
 
 interface DailySummary {
   sale_date: string
@@ -22,10 +20,9 @@ interface DailySummary {
 interface Props {
   summaries: DailySummary[]
   currency: string
-  session: SessionContext
 }
 
-export function SalesHistoryClient({ summaries, currency, session }: Props) {
+export function SalesHistoryClient({ summaries, currency }: Props) {
   const [search, setSearch] = useState("")
 
   const filtered = summaries.filter((s) =>

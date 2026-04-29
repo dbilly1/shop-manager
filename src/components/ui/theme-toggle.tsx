@@ -1,16 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import { useTheme } from "next-themes"
 import { Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export function ThemeToggle() {
-  const [mounted, setMounted] = useState(false)
-  const { resolvedTheme, setTheme } = useTheme()
+// Hydration-safe "have we mounted yet?" without setState-in-effect.
+function useHasMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+}
 
-  // Avoid hydration mismatch — only render icon after mount
-  useEffect(() => { setMounted(true) }, [])
+export function ThemeToggle() {
+  const mounted = useHasMounted()
+  const { resolvedTheme, setTheme } = useTheme()
 
   if (!mounted) {
     // Reserve the same space so layout doesn't shift

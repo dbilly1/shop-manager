@@ -12,8 +12,9 @@ export default async function ReportsPage() {
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
   // Default: last 30 days
-  const endDate = new Date().toISOString().split("T")[0]
-  const startDate = new Date(Date.now() - 29 * 86400000).toISOString().split("T")[0]
+  const today = new Date()
+  const endDate = today.toISOString().split("T")[0]
+  const startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split("T")[0]
 
   const salesQuery = supabase
     .from("sales")
@@ -49,23 +50,26 @@ export default async function ReportsPage() {
 
   const { data: shop } = await supabase.from("shops").select("currency").eq("id", session.shop_id!).single()
 
-  let branches: { id: string; name: string }[] = []
-  if (!session.branch_id) {
-    const { data } = await supabase.from("branches").select("id, name").eq("shop_id", session.shop_id!).eq("status", "active")
-    branches = data ?? []
+  type SbSaleItem = {
+    product_id: string
+    quantity_kg: number
+    quantity_units: number
+    quantity_boxes: number
+    unit_price: number
+    line_total: number
+    cost_price_at_sale: number
+    product: { name: string } | null
   }
 
   return (
     <ReportsClient
       sales={sales ?? []}
       expenses={expenses ?? []}
-      saleItems={(saleItems ?? []) as any}
+      saleItems={(saleItems ?? []) as unknown as SbSaleItem[]}
       creditData={creditData ?? []}
       currency={shop?.currency ?? "USD"}
       startDate={startDate}
       endDate={endDate}
-      session={session}
-      branches={branches}
     />
   )
 }

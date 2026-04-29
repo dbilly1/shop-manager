@@ -27,6 +27,18 @@ export async function POST(req: NextRequest) {
       const shopId = sub.metadata?.shop_id
       if (!shopId) break
 
+      // Cross-check: the customer on the subscription must match the shop's recorded customer
+      const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id
+      const { data: shopRow } = await admin
+        .from("shops")
+        .select("stripe_customer_id")
+        .eq("id", shopId)
+        .single()
+      if (shopRow?.stripe_customer_id && shopRow.stripe_customer_id !== customerId) {
+        console.warn("[Stripe Webhook] customer/shop mismatch for shop", shopId)
+        break
+      }
+
       // Find plan by Stripe price ID
       const priceId = sub.items.data[0]?.price?.id
       const { data: plan } = priceId

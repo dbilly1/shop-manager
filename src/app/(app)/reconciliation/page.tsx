@@ -37,7 +37,7 @@ export default async function ReconciliationPage() {
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
   // ── 60 days ago cutoff ──────────────────────────────────────────────────────
-  const sixtyDaysAgo = new Date(Date.now() - 59 * 86400000)
+  const sixtyDaysAgo = new Date(new Date().getTime() - 59 * 86400000)
     .toISOString()
     .split("T")[0]
 
@@ -95,16 +95,6 @@ export default async function ReconciliationPage() {
     .single()
 
   // ── 4. Branches (for shop-level users) ──────────────────────────────────────
-  let branches: { id: string; name: string }[] = []
-  if (!session.branch_id) {
-    const { data } = await supabase
-      .from("branches")
-      .select("id, name")
-      .eq("shop_id", session.shop_id)
-      .eq("status", "active")
-    branches = data ?? []
-  }
-
   return (
     <ReconciliationClient
       reconciliations={(reconciliations ?? []) as ReconRecord[]}
@@ -112,7 +102,6 @@ export default async function ReconciliationPage() {
       currency={shop?.currency ?? "USD"}
       tolerance={shop?.recon_tolerance ?? 0}
       session={session}
-      branches={branches}
       activeBranchId={activeBranchId}
     />
   )

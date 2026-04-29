@@ -95,7 +95,6 @@ function todayIso(): string {
 export function CreditClient({
   creditSales,
   currency,
-  overdueThreshold,
   session,
 }: Props) {
   const router = useRouter();
@@ -111,7 +110,6 @@ export function CreditClient({
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<"cash" | "mobile_money">("cash");
   const [payDate, setPayDate] = useState(todayIso());
-  const [payNotes, setPayNotes] = useState("");
   const [payLoading, setPayLoading] = useState(false);
 
   // ── Add customer dialog ──────────────────────────────────────────────────
@@ -190,6 +188,9 @@ export function CreditClient({
     [supabase],
   );
 
+  // Legitimate fetch-on-customer-change. setState calls inside loadPayments
+  // are necessary to populate the panel.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (selectedCustomerId) {
       loadPayments(selectedCustomerId);
@@ -197,6 +198,7 @@ export function CreditClient({
       setPayments([]);
     }
   }, [selectedCustomerId, loadPayments]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ─── Record payment ───────────────────────────────────────────────────────
   async function handleRecordPayment() {
@@ -250,7 +252,6 @@ export function CreditClient({
     toast.success("Payment recorded");
     setPayOpen(false);
     setPayAmount("");
-    setPayNotes("");
     setPayDate(todayIso());
     setPayLoading(false);
     router.refresh();
@@ -481,7 +482,6 @@ export function CreditClient({
                     size="sm"
                     onClick={() => {
                       setPayAmount("");
-                      setPayNotes("");
                       setPayDate(todayIso());
                       setPayMethod("cash");
                       setPayOpen(true);

@@ -48,11 +48,13 @@ export default async function AdjustmentsPage() {
   if (adjusterIds.length > 0) {
     try {
       const admin = createAdminClient()
-      const { data: usersData } = await admin.auth.admin.listUsers({
-        perPage: 500,
-      })
-      for (const u of usersData?.users ?? []) {
-        if (adjusterIds.includes(u.id)) {
+      // Resolve each user by ID — more reliable than paginating listUsers
+      const results = await Promise.all(
+        adjusterIds.map((id) => admin.auth.admin.getUserById(id))
+      )
+      for (const { data } of results) {
+        const u = data?.user
+        if (u) {
           userNames[u.id] =
             (u.user_metadata?.full_name as string | undefined) ??
             u.email ??
@@ -67,7 +69,7 @@ export default async function AdjustmentsPage() {
   return (
     <AdjustmentsClient
       adjustments={adjustments ?? []}
-      branchProducts={(branchProducts ?? []) as any}
+      branchProducts={(branchProducts ?? []) as unknown as Parameters<typeof AdjustmentsClient>[0]["branchProducts"]}
       currency={shop?.currency ?? "USD"}
       session={session}
       userNames={userNames}

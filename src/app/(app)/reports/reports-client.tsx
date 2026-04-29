@@ -27,14 +27,6 @@ import {
 } from "lucide-react"
 import { formatCurrency } from "@/utils/format"
 
-interface SessionContext {
-  user_id: string
-  shop_id: string | null
-  branch_id: string | null
-  role: string | null
-  is_super_admin: boolean
-}
-
 interface Props {
   sales: { sale_date: string; total_amount: number; payment_method: string }[]
   expenses: { expense_date: string; amount: number; category: string }[]
@@ -52,8 +44,6 @@ interface Props {
   currency: string
   startDate: string
   endDate: string
-  session: SessionContext
-  branches: { id: string; name: string }[]
 }
 
 const PIE_COLORS = [
@@ -113,8 +103,6 @@ export function ReportsClient({
   currency,
   startDate,
   endDate,
-  session: _session,
-  branches: _branches,
 }: Props) {
   const [localStart, setLocalStart] = useState(startDate)
   const [localEnd, setLocalEnd] = useState(endDate)

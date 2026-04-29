@@ -255,79 +255,40 @@ export function BulkEntryDialog({
     // One shared batch_id ties all orders in this session together
     const batchId = crypto.randomUUID();
 
-    // Each line is its own independent order — no grouping
+    // Each line is its own independent order — but each is created atomically
     for (const line of validLines) {
       const lineTotal = Math.max(0, line.unit_price * line.quantity - line.discount);
 
-      const { data: sale, error: saleError } = await supabase
-        .from("sales")
-        .insert({
-          shop_id: session.shop_id,
-          branch_id: branchId,
-          sale_date: saleDate,
-          total_amount: lineTotal,
-          payment_method: line.payment_method,
-          customer_id: line.customer_id || null,
-          recorded_by: session.user_id,
-          recorded_by_name: session.full_name ?? null,
-          notes: notes || null,
-          batch_id: batchId,
-        })
-        .select()
-        .single();
-
-      if (saleError || !sale) {
-        setError(saleError?.message ?? "Failed to create sale");
-        setLoading(false);
-        return;
-      }
-
-      const { error: itemError } = await supabase.from("sale_items").insert({
-        sale_id: sale.id,
-        shop_id: session.shop_id,
-        branch_id: branchId,
-        product_id: line.product_id,
-        quantity_kg: line.unit_type === "kg" ? line.quantity : 0,
-        quantity_units: line.unit_type === "units" ? line.quantity : 0,
-        quantity_boxes: line.unit_type === "boxes" ? line.boxes : 0,
-        unit_price: line.unit_price,
-        discount_amount: line.discount,
-        line_total: lineTotal,
-        cost_price_at_sale: line.cost_price,
+      const { error: rpcError } = await supabase.rpc("create_sale_with_items", {
+        p_shop_id: session.shop_id,
+        p_branch_id: branchId,
+        p_sale_date: saleDate,
+        p_total_amount: lineTotal,
+        p_payment_method: line.payment_method,
+        p_customer_id: line.customer_id || null,
+        p_recorded_by: session.user_id,
+        p_recorded_by_name: session.full_name ?? null,
+        p_notes: notes || null,
+        p_batch_id: batchId,
+        p_items: [
+          {
+            branch_product_id: line.branch_product_id,
+            product_id: line.product_id,
+            quantity_kg: line.unit_type === "kg" ? line.quantity : 0,
+            quantity_units: line.unit_type === "units" ? line.quantity : 0,
+            quantity_boxes: line.unit_type === "boxes" ? line.boxes : 0,
+            unit_price: line.unit_price,
+            discount_amount: line.discount,
+            line_total: lineTotal,
+            cost_price_at_sale: line.cost_price,
+          },
+        ],
       });
-      if (itemError) {
-        setError(itemError.message);
+
+      if (rpcError) {
+        setError(rpcError.message);
         setLoading(false);
         return;
-      }
-
-      // Deduct stock
-      const bp = branchProducts.find((p) => p.id === line.branch_product_id);
-      if (bp) {
-        const update: Record<string, number> = {};
-        if (line.unit_type === "kg")
-          update.current_stock_kg = Math.max(0, bp.current_stock_kg - line.quantity);
-        else if (line.unit_type === "boxes")
-          update.current_stock_boxes = Math.max(0, bp.current_stock_boxes - line.boxes);
-        else
-          update.current_stock_units = Math.max(0, bp.current_stock_units - line.quantity);
-        await supabase
-          .from("branch_products")
-          .update({ ...update, updated_at: new Date().toISOString() })
-          .eq("id", bp.id);
-      }
-
-      // Credit ledger entry
-      if (line.payment_method === "credit" && line.customer_id) {
-        await supabase.from("credit_sales").insert({
-          shop_id: session.shop_id,
-          branch_id: branchId,
-          sale_id: sale.id,
-          customer_id: line.customer_id,
-          amount_owed: lineTotal,
-          amount_paid: 0,
-          balance: lineTotal,
-        });
       }
     }
 

@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Playfair_Display, DM_Sans } from "next/font/google"
 
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair", weight: ["400", "700"] })
@@ -88,7 +89,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       `}</style>
 
       {/* Logo */}
-      <a href="/" style={{ textDecoration: "none", marginBottom: "2rem", textAlign: "center" }}>
+      <Link href="/" style={{ textDecoration: "none", marginBottom: "2rem", textAlign: "center" }}>
         <div
           style={{
             fontFamily: "var(--font-playfair, serif)",
@@ -103,7 +104,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div style={{ fontSize: "0.8rem", color: "rgba(232,226,212,0.4)", marginTop: "0.25rem" }}>
           Retail operations, simplified
         </div>
-      </a>
+      </Link>
 
       {/* Card */}
       <div

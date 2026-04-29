@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 import { getSessionContext, canAccessConsolidatedView } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { BranchDashboard } from "./branch-dashboard"
