@@ -181,6 +181,9 @@ After pulling this branch, run these new migrations against Supabase in order:
 
 -- 010: temp password column on invites
 \i supabase/migrations/010_invite_temp_password.sql
+
+-- 011: atomic shop + branch creation RPC
+\i supabase/migrations/011_atomic_shop_creation.sql
 ```
 
 ---
@@ -194,6 +197,7 @@ src/lib/supabase/middleware.ts                       (admin guard, public-route 
 
 src/lib/auth-guard.ts                                NEW
 src/lib/constants.ts                                 NEW
+src/lib/onboarding-options.ts                        NEW
 
 src/app/(app)/layout.tsx                             (now a server component)
 src/app/(app)/app-shell.tsx                          NEW (client wrapper)
