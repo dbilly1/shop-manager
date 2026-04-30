@@ -142,7 +142,6 @@ export default function OnboardingPage() {
         setPlans(FALLBACK_PLANS)
         setSelectedPlanId(FALLBACK_PLANS[0].id)
       })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function handleCountryChange(code: string) {

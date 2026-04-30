@@ -37,6 +37,7 @@ export async function updateSession(request: NextRequest) {
     pathname === "/" ||
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname === "/auth/callback" ||        // email-confirmation code exchange
     pathname.startsWith("/invite/") ||
     pathname.startsWith("/api/invite/") ||
     pathname.startsWith("/api/webhooks/") ||

@@ -18,6 +18,8 @@ function LoginForm() {
   const isInvited =
     searchParams.get("invited") === "1" || !!searchParams.get("invite_token")
 
+  const confirmationFailed = searchParams.get("error") === "confirmation_failed"
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -60,6 +62,13 @@ function LoginForm() {
             : "Sign in to your account to continue"}
         </p>
       </div>
+
+      {confirmationFailed && !error && (
+        <div className="auth-error" style={{ marginBottom: "1.25rem" }}>
+          That confirmation link has expired or is invalid. Sign in below — or{" "}
+          <Link href="/signup" className="auth-link">create a new account</Link>.
+        </div>
+      )}
 
       {error && (
         <div className="auth-error" style={{ marginBottom: "1.25rem" }}>
