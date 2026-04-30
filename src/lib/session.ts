@@ -36,7 +36,19 @@ export async function getSessionContext(): Promise<SessionContext | null> {
     .eq("status", "active")
     .single()
 
-  if (!member) return null
+  // Authenticated but no shop yet — onboarding incomplete.
+  // Return a valid session with shop_id: null so the app layout can redirect
+  // to /onboarding rather than falling through to /login (which would loop).
+  if (!member) {
+    return {
+      user_id: user.id,
+      full_name: fullName,
+      shop_id: null,
+      branch_id: null,
+      role: null,
+      is_super_admin: false,
+    }
+  }
 
   return {
     user_id: user.id,
