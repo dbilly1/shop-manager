@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { Loader2, Mail } from "lucide-react"
+import { Loader2, Mail, Eye, EyeOff } from "lucide-react"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("")
   const [error,    setError]    = useState("")
   const [loading,  setLoading]  = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   // If Supabase requires email confirmation the session is null after signUp;
   // in that case we show a "check your email" screen rather than navigating.
@@ -166,17 +167,32 @@ export default function SignupPage() {
 
         <div>
           <label htmlFor="password" className="auth-label">Password</label>
-          <input
-            id="password"
-            type="password"
-            className="auth-input"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            autoComplete="new-password"
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              className="auth-input"
+              placeholder="Min. 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+              style={{ paddingRight: "2.75rem" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              tabIndex={-1}
+              style={{
+                position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(232,226,212,0.4)", padding: 0, display: "flex", alignItems: "center",
+              }}
+            >
+              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
         </div>
 
         <button type="submit" className="auth-btn" disabled={loading} style={{ marginTop: "0.25rem" }}>

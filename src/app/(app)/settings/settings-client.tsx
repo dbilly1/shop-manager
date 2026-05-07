@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Loader2, Plus, Building2, RotateCcw } from "lucide-react"
+import { Loader2, Plus, Building2, RotateCcw, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
 
@@ -50,6 +50,14 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [upgrading, setUpgrading] = useState<string | null>(null)
+
+  // Security / change password
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPasswords, setShowPasswords] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState("")
 
   // General settings form
   const [shopName, setShopName] = useState(shop?.name ?? "")
@@ -153,6 +161,53 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
     router.refresh()
   }
 
+  async function changePassword() {
+    setPasswordError("")
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.")
+      return
+    }
+
+    setChangingPassword(true)
+    const supabase = createClient()
+
+    // Re-authenticate with current password before updating
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) {
+      setPasswordError("Could not verify your session. Please sign in again.")
+      setChangingPassword(false)
+      return
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    })
+    if (authError) {
+      setPasswordError("Current password is incorrect.")
+      setChangingPassword(false)
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setChangingPassword(false)
+
+    if (error) {
+      setPasswordError(error.message)
+    } else {
+      toast.success("Password updated successfully")
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      setShowPasswords(false)
+    }
+  }
+
   return (
     <div className="space-y-4 max-w-2xl">
 
@@ -161,6 +216,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branches">Branches</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
         {/* General */}
@@ -323,6 +379,82 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
             </CardContent>
           </Card>
         </TabsContent>
+        {/* Security */}
+        <TabsContent value="security" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm">Change Password</CardTitle>
+              </div>
+              <CardDescription>
+                Enter your current password to confirm your identity, then choose a new one.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {passwordError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Current Password</Label>
+                <Input
+                  type={showPasswords ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Your current password"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>New Password</Label>
+                <Input
+                  type={showPasswords ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confirm New Password</Label>
+                <Input
+                  type={showPasswords ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat your new password"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={showPasswords}
+                  onCheckedChange={setShowPasswords}
+                  id="show-passwords"
+                />
+                <Label htmlFor="show-passwords" className="cursor-pointer font-normal text-muted-foreground">
+                  Show passwords
+                </Label>
+              </div>
+
+              <Button
+                onClick={changePassword}
+                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+              >
+                {changingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Update Password
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
 
       <Dialog open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>

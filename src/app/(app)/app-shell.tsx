@@ -8,6 +8,7 @@ import { AnnouncementBanner } from "@/components/shared/announcement-banner"
 import { SessionCtx } from "@/hooks/useSession"
 import { BranchCtx } from "@/hooks/useBranch"
 import { Toaster } from "@/components/ui/sonner"
+import { IdleTimeoutDialog } from "@/components/shared/idle-timeout-dialog"
 import type { SessionContext, Branch, Shop, Announcement } from "@/types"
 
 interface Props {
@@ -114,6 +115,7 @@ export function AppShell({
           </div>
         </div>
         <Toaster position="top-right" richColors />
+        <IdleTimeoutDialog />
       </BranchCtx.Provider>
     </SessionCtx.Provider>
   )

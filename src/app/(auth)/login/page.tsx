@@ -4,7 +4,7 @@ import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { Loader2 } from "lucide-react"
+import { Loader2, Eye, EyeOff } from "lucide-react"
 
 function LoginForm() {
   const router = useRouter()
@@ -14,11 +14,13 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const isInvited =
     searchParams.get("invited") === "1" || !!searchParams.get("invite_token")
 
   const confirmationFailed = searchParams.get("error") === "confirmation_failed"
+  const passwordReset = searchParams.get("message") === "password_reset"
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -63,6 +65,20 @@ function LoginForm() {
         </p>
       </div>
 
+      {passwordReset && !error && (
+        <div style={{
+          background: "rgba(34,197,94,0.1)",
+          border: "1px solid rgba(34,197,94,0.3)",
+          borderRadius: "7px",
+          padding: "0.625rem 0.875rem",
+          fontSize: "0.8125rem",
+          color: "#86efac",
+          marginBottom: "1.25rem",
+        }}>
+          Password updated. Sign in with your new password.
+        </div>
+      )}
+
       {confirmationFailed && !error && (
         <div className="auth-error" style={{ marginBottom: "1.25rem" }}>
           That confirmation link has expired or is invalid. Sign in below — or{" "}
@@ -92,17 +108,37 @@ function LoginForm() {
         </div>
 
         <div>
-          <label htmlFor="password" className="auth-label">Password</label>
-          <input
-            id="password"
-            type="password"
-            className="auth-input"
-            placeholder="Your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-          />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.375rem" }}>
+            <label htmlFor="password" className="auth-label" style={{ margin: 0 }}>Password</label>
+            <Link href="/forgot-password" className="auth-link" style={{ fontSize: "0.775rem" }}>
+              Forgot password?
+            </Link>
+          </div>
+          <div style={{ position: "relative" }}>
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              className="auth-input"
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              style={{ paddingRight: "2.75rem" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              tabIndex={-1}
+              style={{
+                position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(232,226,212,0.4)", padding: 0, display: "flex", alignItems: "center",
+              }}
+            >
+              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
         </div>
 
         <button type="submit" className="auth-btn" disabled={loading} style={{ marginTop: "0.25rem" }}>
