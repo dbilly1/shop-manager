@@ -23,7 +23,7 @@ export function IdleTimeoutDialog() {
   const { showWarning, secondsLeft, staySignedIn, signOut } = useIdleTimeout()
 
   return (
-    <Dialog open={showWarning} dismissible={false}>
+    <Dialog open={showWarning}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <div className="flex items-center gap-3">
