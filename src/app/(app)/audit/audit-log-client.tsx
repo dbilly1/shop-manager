@@ -126,12 +126,7 @@ export function AuditLogClient({ logs }: Props) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-3">
-      {/* Heading */}
-      <div className="mb-2">
-        <h1 className="text-xl font-bold">Audit Log</h1>
-        <p className="text-muted-foreground text-sm">Activity history for your shop</p>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-3">
 
       {/* Day groups */}
       {groups.map((group) => {

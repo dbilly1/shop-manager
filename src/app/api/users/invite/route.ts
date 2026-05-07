@@ -5,7 +5,7 @@ import { randomBytes } from "crypto"
 import { sendInviteEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
-  const { email, role, branch_id, shop_id, temp_password } = await req.json()
+  const { email, full_name, role, branch_id, shop_id, temp_password } = await req.json()
 
   if (!temp_password || temp_password.length < 6) {
     return NextResponse.json({ error: "Temporary password must be at least 6 characters" }, { status: 400 })
@@ -56,16 +56,20 @@ export async function POST(req: NextRequest) {
   const { data: listData } = await admin.auth.admin.listUsers({ perPage: 500 })
   const existingAuthUser = listData?.users?.find((u) => u.email === email)
 
+  const userMeta = full_name?.trim() ? { full_name: full_name.trim() } : undefined
+
   if (existingAuthUser) {
     await admin.auth.admin.updateUserById(existingAuthUser.id, {
       password: temp_password,
       email_confirm: true,
+      ...(userMeta && { user_metadata: userMeta }),
     })
   } else {
     const { error: createError } = await admin.auth.admin.createUser({
       email,
       password: temp_password,
       email_confirm: true,
+      user_metadata: userMeta,
     })
     if (createError) {
       return NextResponse.json({ error: `Could not create user: ${createError.message}` }, { status: 500 })

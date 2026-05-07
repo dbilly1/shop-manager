@@ -116,13 +116,7 @@ export function AlertsClient({ alerts }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Alerts</h1>
-        {openAlerts.length > 0 && (
-          <Badge variant="destructive">{openAlerts.length} open</Badge>
-        )}
-      </div>
+    <div className="space-y-4">
 
       <Tabs defaultValue="open">
         <TabsList>

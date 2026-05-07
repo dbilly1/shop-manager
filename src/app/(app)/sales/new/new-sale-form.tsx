@@ -165,7 +165,7 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">New Sale</h1>
       </div>

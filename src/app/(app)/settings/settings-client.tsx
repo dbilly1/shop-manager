@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Loader2, Plus, Building2 } from "lucide-react"
+import { Loader2, Plus, Building2, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
 
@@ -57,7 +57,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [creditOverdueDays, setCreditOverdueDays] = useState(String(shop?.credit_overdue_days ?? 30))
   const [reconTolerance, setReconTolerance] = useState(String(shop?.recon_tolerance ?? 0))
   const [pricingMode, setPricingMode] = useState(shop?.pricing_mode ?? "uniform")
-  const [primaryColour, setPrimaryColour] = useState(shop?.primary_colour ?? "#000000")
+  const [primaryColour, setPrimaryColour] = useState(shop?.primary_colour || "#1b1a19")
 
   const plan = subscription?.plan
   const canEditSettings = isOwner(session)
@@ -78,6 +78,22 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
       setSaving(false)
     } else {
       toast.success("Settings saved")
+      window.location.reload()
+    }
+  }
+
+  async function resetColour() {
+    setPrimaryColour("#1b1a19")
+    setSaving(true)
+    const supabase = createClient()
+    const { error } = await supabase.from("shops").update({
+      primary_colour: "#1b1a19",
+    }).eq("id", session.shop_id!)
+    setSaving(false)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Brand colour removed")
       window.location.reload()
     }
   }
@@ -138,8 +154,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="text-xl font-bold">Settings</h1>
+    <div className="space-y-4 max-w-2xl">
 
       <Tabs defaultValue="general">
         <TabsList>
@@ -149,7 +164,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsList>
 
         {/* General */}
-        <TabsContent value="general" className="space-y-6 mt-4">
+        <TabsContent value="general" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Shop Details</CardTitle>
@@ -197,9 +212,33 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               <Separator />
               <div className="space-y-2">
                 <Label>Primary Colour</Label>
-                <div className="flex items-center gap-3">
-                  <input type="color" value={primaryColour} onChange={(e) => setPrimaryColour(e.target.value)} disabled={!canEditSettings} className="h-9 w-9 rounded border p-0.5 cursor-pointer" />
-                  <Input value={primaryColour} onChange={(e) => setPrimaryColour(e.target.value)} className="flex-1" disabled={!canEditSettings} />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={primaryColour}
+                    onChange={(e) => setPrimaryColour(e.target.value)}
+                    disabled={!canEditSettings}
+                    className="h-9 w-9 shrink-0 rounded border p-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <Input
+                    value={primaryColour}
+                    onChange={(e) => setPrimaryColour(e.target.value)}
+                    className="flex-1 font-mono text-sm"
+                    disabled={!canEditSettings}
+                  />
+                  {canEditSettings && primaryColour !== "#1b1a19" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={saving}
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                      title="Reset to default"
+                      onClick={resetColour}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
               {canEditSettings && (

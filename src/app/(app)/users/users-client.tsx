@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatRole, formatDate } from "@/utils/format";
-import { UserPlus, Loader2, RefreshCw, XCircle, Copy, Check, Link2, Shuffle } from "lucide-react";
+import { UserPlus, Loader2, RefreshCw, XCircle, Copy, Check, Link2, Shuffle, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionContext, Role } from "@/types";
 
@@ -73,11 +73,14 @@ interface Props {
 
 export function UsersClient({ members, invites, branches, session }: Props) {
   const router = useRouter();
+  const [localMembers, setLocalMembers] = useState<Member[]>(members);
   const [localInvites, setLocalInvites] = useState<Invite[]>(invites);
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<Role>("salesperson");
   const [inviteBranch, setInviteBranch] = useState("");
   const [inviteTempPassword, setInviteTempPassword] = useState("");
@@ -134,6 +137,7 @@ export function UsersClient({ members, invites, branches, session }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: inviteEmail,
+        full_name: inviteName.trim() || undefined,
         role: inviteRole,
         branch_id: selectedRoleConfig?.requiresBranch ? inviteBranch : null,
         shop_id: session.shop_id,
@@ -163,6 +167,7 @@ export function UsersClient({ members, invites, branches, session }: Props) {
     setOpen(false);
     setInviteLink(null);
     setInviteEmail("");
+    setInviteName("");
     setInviteRole("salesperson");
     setInviteBranch("");
     setInviteTempPassword("");
@@ -207,10 +212,37 @@ export function UsersClient({ members, invites, branches, session }: Props) {
     }
   }
 
-  const activeMembers = members.filter((m) => m.status === "active");
+  async function removeMember(id: string) {
+    // Optimistically remove from list
+    setLocalMembers((prev) => prev.filter((m) => m.id !== id));
+
+    const res = await fetch(`/api/users/members/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      // Restore on failure
+      setLocalMembers(members);
+      const d = await res.json().catch(() => ({}));
+      toast.error(d.error ?? "Failed to remove member");
+    } else {
+      toast.success("Member removed");
+    }
+  }
+
+  function canRemoveMember(m: Member): boolean {
+    // Must be owner or GM to remove anyone
+    if (!["owner", "general_manager"].includes(session.role ?? "")) return false;
+    // Cannot remove yourself
+    if (m.user_id === session.user_id) return false;
+    // Cannot remove the shop owner
+    if (m.role === "owner") return false;
+    // GM cannot remove another GM — only owners can
+    if (session.role === "general_manager" && m.role === "general_manager") return false;
+    return true;
+  }
+
+  const activeMembers = localMembers.filter((m) => m.status === "active");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Users</h1>
         {canInvite && (
@@ -248,13 +280,14 @@ export function UsersClient({ members, invites, branches, session }: Props) {
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
                     Joined
                   </th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {activeMembers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-4 py-12 text-center text-muted-foreground text-sm"
                     >
                       No members yet
@@ -267,7 +300,12 @@ export function UsersClient({ members, invites, branches, session }: Props) {
                       className="hover:bg-muted/30 transition-colors"
                     >
                       <td className="px-4 py-3 font-medium">
-                        {m.full_name ?? <span className="text-muted-foreground italic text-xs">{m.user_id.slice(0, 8)}…</span>}
+                        <div className="flex items-center gap-2">
+                          {m.full_name ?? <span className="text-muted-foreground italic text-xs">{m.user_id.slice(0, 8)}…</span>}
+                          {m.user_id === session.user_id && (
+                            <span className="text-xs text-muted-foreground">(you)</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="capitalize text-xs">
@@ -285,6 +323,19 @@ export function UsersClient({ members, invites, branches, session }: Props) {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(m.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {canRemoveMember(m) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setRemoveConfirmId(m.id)}
+                            title="Remove member"
+                          >
+                            <UserMinus className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -403,7 +454,9 @@ export function UsersClient({ members, invites, branches, session }: Props) {
                   <p className="text-sm font-medium">Account created</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Share the link and credentials below with{" "}
-                    <span className="font-medium text-foreground">{inviteEmail}</span>.
+                    <span className="font-medium text-foreground">
+                      {inviteName.trim() ? `${inviteName.trim()} (${inviteEmail})` : inviteEmail}
+                    </span>.
                   </p>
                 </div>
               </div>
@@ -447,6 +500,16 @@ export function UsersClient({ members, invites, branches, session }: Props) {
           ) : (
             /* ── Step 1: invite form ── */
             <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Full name <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  type="text"
+                  placeholder="Jane Smith"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
               <div className="space-y-2">
                 <Label>Email</Label>
                 <Input
@@ -562,6 +625,37 @@ export function UsersClient({ members, invites, branches, session }: Props) {
               }}
             >
               Cancel invite
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Remove member confirm dialog ── */}
+      <Dialog open={!!removeConfirmId} onOpenChange={(o) => { if (!o) setRemoveConfirmId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove member?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This member will immediately lose access to the shop. You can invite them again later if needed.
+          </p>
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setRemoveConfirmId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={() => {
+                if (removeConfirmId) removeMember(removeConfirmId);
+                setRemoveConfirmId(null);
+              }}
+            >
+              Remove
             </Button>
           </div>
         </DialogContent>

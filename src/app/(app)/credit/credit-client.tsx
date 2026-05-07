@@ -534,7 +534,7 @@ export function CreditClient({
             </div>
 
             {/* Scrollable tables */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {/* Credit Sales */}
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">

@@ -240,7 +240,7 @@ export function ExpensesClient({
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
       {/* ── Left sidebar ─────────────────────────────────────────────────────── */}
       <aside className="flex flex-col gap-4">
         {/* Last 30 days card */}

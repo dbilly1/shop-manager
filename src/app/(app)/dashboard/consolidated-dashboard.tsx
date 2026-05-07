@@ -70,8 +70,7 @@ export async function ConsolidatedDashboard({ session }: Props) {
     .limit(8)
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">Consolidated Dashboard</h1>
+    <div className="space-y-4">
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard

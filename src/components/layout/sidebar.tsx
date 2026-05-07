@@ -69,13 +69,18 @@ export function Sidebar({
     return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
   }
 
+  const DEFAULT_SIDEBAR = "#1b1a19" // matches --default-sidebar in globals.css
+
   const sidebarStyle = (() => {
-    if (!shopColour) return {};
+    if (!shopColour) {
+      return { backgroundColor: DEFAULT_SIDEBAR, color: "#fff" }
+    }
     const hsl = hexToHsl(shopColour);
-    if (!hsl) return {};
-    const [h, s] = hsl;
+    if (!hsl) return { backgroundColor: DEFAULT_SIDEBAR, color: "#fff" };
+    const [h, s, l] = hsl;
+    const bgL = Math.min(l, 8);
     return {
-      backgroundColor: `hsl(${h} ${s}% 8%)`,
+      backgroundColor: `hsl(${h} ${s}% ${bgL}%)`,
       borderColor: `hsl(${h} ${s}% 25%)`,
       color: "#fff",
     };
@@ -129,12 +134,7 @@ export function Sidebar({
       style={sidebarStyle}
     >
       {/* Logo */}
-      <div
-        className={cn(
-          "flex items-center gap-3 px-4 py-4 border-b",
-          shopColour ? "border-white/10" : "",
-        )}
-      >
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
         {shopLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -143,16 +143,9 @@ export function Sidebar({
             className="h-7 w-7 rounded object-cover"
           />
         ) : (
-          <Building2
-            className={cn("h-6 w-6 shrink-0", shopColour ? "text-white" : "")}
-          />
+          <Building2 className="h-6 w-6 shrink-0 text-white" />
         )}
-        <span
-          className={cn(
-            "font-semibold text-sm truncate",
-            shopColour ? "text-white" : "",
-          )}
-        >
+        <span className="font-semibold text-sm truncate text-white">
           {shopName}
         </span>
       </div>
@@ -180,13 +173,9 @@ export function Sidebar({
                   href={item.href}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    shopColour
-                      ? active
-                        ? ""
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                      : active
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    active
+                      ? "bg-white/15 text-white"
+                      : "text-white/60 hover:text-white hover:bg-white/10",
                   )}
                   style={activeStyle}
                 >

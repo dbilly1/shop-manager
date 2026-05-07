@@ -37,7 +37,7 @@ export function AppShell({
   // Apply shop primary colour as CSS variables
   useEffect(() => {
     const colour = shop?.primary_colour
-    if (!colour || colour === "#000000") return
+    if (!colour || colour === "#1b1a19") return
     const ri = parseInt(colour.slice(1, 3), 16)
     const gi = parseInt(colour.slice(3, 5), 16)
     const bi = parseInt(colour.slice(5, 7), 16)
@@ -60,17 +60,28 @@ export function AppShell({
     const sPct = Math.round(s * 100)
 
     const root = document.documentElement
+    const tintS = Math.min(Math.round(sPct * 0.4), 30)
     root.style.setProperty("--shop-primary", `${ri} ${gi} ${bi}`)
     root.style.setProperty("--shop-primary-dark", `${dr} ${dg} ${db}`)
     root.style.setProperty("--primary", `hsl(${hDeg} ${sPct}% 40%)`)
     root.style.setProperty("--primary-foreground", "oklch(1 0 0)")
     root.style.setProperty("--ring", `hsl(${hDeg} ${sPct}% 40%)`)
+
+    const styleTag = document.createElement("style")
+    styleTag.id = "brand-bg"
+    styleTag.textContent = `
+      :root { --background: hsl(${hDeg} ${tintS}% 97.5%); }
+      .dark  { --background: hsl(${hDeg} ${tintS}% 7%); }
+    `
+    document.head.appendChild(styleTag)
+
     return () => {
       root.style.removeProperty("--shop-primary")
       root.style.removeProperty("--shop-primary-dark")
       root.style.removeProperty("--primary")
       root.style.removeProperty("--primary-foreground")
       root.style.removeProperty("--ring")
+      document.getElementById("brand-bg")?.remove()
     }
   }, [shop?.primary_colour])
 
@@ -86,7 +97,7 @@ export function AppShell({
   }
 
   const shopColour =
-    shop?.primary_colour && shop.primary_colour !== "#000000" ? shop.primary_colour : null
+    shop?.primary_colour && shop.primary_colour !== "#1b1a19" ? shop.primary_colour : null
   const selectedBranch = branches.find((b) => b.id === selectedBranchId) ?? null
 
   return (
@@ -94,7 +105,7 @@ export function AppShell({
       <BranchCtx.Provider
         value={{ branches, selectedBranchId, setSelectedBranchId: handleSetBranch, selectedBranch }}
       >
-        <div className="flex min-h-screen bg-background">
+        <div className="flex h-screen bg-background">
           <Sidebar shopName={shop?.name ?? "ShopManager"} shopLogo={shop?.logo_url} shopColour={shopColour} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopNav userEmail={userEmail} userName={session.full_name ?? userEmail.split("@")[0] ?? "User"} />

@@ -73,7 +73,7 @@ export function SaleDayClient({ date, sales, currency, session }: Props) {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4">
       <div className="flex items-center gap-3">
         <LinkButton href="/sales" variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></LinkButton>
         <div>
