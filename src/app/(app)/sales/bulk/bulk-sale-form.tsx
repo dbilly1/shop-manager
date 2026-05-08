@@ -21,6 +21,7 @@ import {
 import { formatCurrency } from "@/utils/format";
 import { Plus, Loader2, X, ChevronDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { logAuditAction } from "@/lib/audit-action";
 import type { SessionContext } from "@/types";
 
 interface BranchProduct {
@@ -34,6 +35,7 @@ interface BranchProduct {
     id: string;
     name: string;
     unit_type: string;
+    units_per_box: number | null;
     base_price: number;
     cost_price: number;
   } | null;
@@ -43,6 +45,7 @@ interface SaleLine {
   branch_product_id: string;
   product_id: string;
   unit_type: string;
+  units_per_box: number | null;
   unit_price: number;
   quantity: number;
   boxes: number;
@@ -78,6 +81,7 @@ function emptyLine(): SaleLine {
     branch_product_id: "",
     product_id: "",
     unit_type: "units",
+    units_per_box: null,
     unit_price: 0,
     quantity: 1,
     boxes: 0,
@@ -182,6 +186,7 @@ export function BulkEntryDialog({
             branch_product_id: bp.id,
             product_id: bp.product.id,
             unit_type: bp.product.unit_type,
+            units_per_box: bp.product.units_per_box ?? null,
             unit_price: bp.override_price ?? bp.product.base_price,
             cost_price: bp.product.cost_price,
           };
@@ -215,20 +220,22 @@ export function BulkEntryDialog({
     setExpenses((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function lineAmt(l: SaleLine): number {
+    const boxAmt = l.units_per_box ? l.unit_price * l.units_per_box * l.boxes : 0
+    return Math.max(0, l.unit_price * l.quantity + boxAmt - l.discount)
+  }
+
   // Only lines with a product selected and quantity > 0 count as valid
   const validLines = lines.filter(
     (l) => l.branch_product_id && (l.quantity > 0 || l.boxes > 0),
   );
-  const total = validLines.reduce(
-    (s, l) => s + (l.unit_price * l.quantity - l.discount),
-    0,
-  );
+  const total = validLines.reduce((s, l) => s + lineAmt(l), 0);
   const cashTotal = validLines
     .filter((l) => l.payment_method === "cash")
-    .reduce((s, l) => s + (l.unit_price * l.quantity - l.discount), 0);
+    .reduce((s, l) => s + lineAmt(l), 0);
   const mobileTotal = validLines
     .filter((l) => l.payment_method === "mobile")
-    .reduce((s, l) => s + (l.unit_price * l.quantity - l.discount), 0);
+    .reduce((s, l) => s + lineAmt(l), 0);
 
   async function handleSubmit() {
     if (validLines.length === 0) {
@@ -257,7 +264,7 @@ export function BulkEntryDialog({
 
     // Each line is its own independent order — but each is created atomically
     for (const line of validLines) {
-      const lineTotal = Math.max(0, line.unit_price * line.quantity - line.discount);
+      const lineTotal = lineAmt(line);
 
       const { error: rpcError } = await supabase.rpc("create_sale_with_items", {
         p_shop_id: session.shop_id,
@@ -276,7 +283,7 @@ export function BulkEntryDialog({
             product_id: line.product_id,
             quantity_kg: line.unit_type === "kg" ? line.quantity : 0,
             quantity_units: line.unit_type === "units" ? line.quantity : 0,
-            quantity_boxes: line.unit_type === "boxes" ? line.boxes : 0,
+            quantity_boxes: line.boxes,
             unit_price: line.unit_price,
             discount_amount: line.discount,
             line_total: lineTotal,
@@ -333,6 +340,7 @@ export function BulkEntryDialog({
     toast.success(
       `${validLines.length} order${validLines.length !== 1 ? "s" : ""} saved`,
     );
+    void logAuditAction({ branchId, action: "CREATE_SALE", entityType: "sale", entityId: batchId, newValues: { orders: validLines.length, sale_date: saleDate } })
     resetForm();
     onOpenChange(false);
     router.refresh();
@@ -432,8 +440,7 @@ export function BulkEntryDialog({
             </thead>
             <tbody className="divide-y">
               {lines.map((line, idx) => {
-                const lineTotal =
-                  line.unit_price * line.quantity - line.discount;
+                const lineTotal = lineAmt(line);
                 const isValid =
                   line.branch_product_id &&
                   (line.quantity > 0 || line.boxes > 0);
@@ -488,6 +495,8 @@ export function BulkEntryDialog({
                         step="any"
                         value={line.boxes || ""}
                         placeholder="0"
+                        disabled={!line.units_per_box}
+                        title={!line.units_per_box ? "Product has no box size configured" : undefined}
                         onChange={(e) =>
                           updateLine(
                             idx,
@@ -495,7 +504,7 @@ export function BulkEntryDialog({
                             parseFloat(e.target.value) || 0,
                           )
                         }
-                        className="h-8 text-sm w-full"
+                        className="h-8 text-sm w-full disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </td>
                     <td className="px-2 py-2">

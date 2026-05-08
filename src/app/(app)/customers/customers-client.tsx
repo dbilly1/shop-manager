@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,17 +80,20 @@ export function CustomersClient({
       return;
     }
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("customers").insert({
-      shop_id: session.shop_id,
-      branch_id: bid,
-      name: name.trim(),
-      phone: phone || null,
-      email: email || null,
-      address: address || null,
+    const res = await fetch("/api/customers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        branch_id: bid,
+        name: name.trim(),
+        phone: phone || null,
+        email: email || null,
+        address: address || null,
+      }),
     });
-    if (error) {
-      toast.error(error.message);
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to add customer");
     } else {
       toast.success("Customer added");
       setOpen(false);

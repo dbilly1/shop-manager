@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/auth-guard"
+import { logAudit } from "@/lib/audit"
 
 export async function POST(req: NextRequest) {
   const guard = await requireRole(["owner", "general_manager"])
@@ -18,5 +19,15 @@ export async function POST(req: NextRequest) {
   })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  await logAudit({
+    shopId: guard.shop_id!,
+    branchId: null,
+    userId: guard.user_id,
+    action: "APPROVE_ADJUSTMENT",
+    entityType: "stock_adjustment",
+    entityId: adjustment_id,
+  })
+
   return NextResponse.json({ success: true })
 }

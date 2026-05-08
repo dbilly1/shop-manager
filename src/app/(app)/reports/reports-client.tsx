@@ -36,7 +36,6 @@ interface Props {
   sales: { sale_date: string; total_amount: number; payment_method: string }[]
   expenses: { expense_date: string; amount: number; category: string }[]
   saleItems: {
-    sale_date?: string
     product_id: string
     quantity_kg: number
     quantity_units: number
@@ -45,6 +44,7 @@ interface Props {
     line_total: number
     cost_price_at_sale: number
     product: { name: string } | null
+    sale: { sale_date: string } | null
   }[]
   creditData: { balance: number; amount_paid: number }[]
   priorSales: { sale_date: string; total_amount: number; payment_method: string }[]
@@ -185,8 +185,9 @@ export function ReportsClient({
   const filteredSaleItems = useMemo(
     () =>
       saleItems.filter((item) => {
-        if (!item.sale_date) return true
-        return item.sale_date >= rangeStart && item.sale_date <= rangeEnd
+        const saleDate = item.sale?.sale_date
+        if (!saleDate) return true
+        return saleDate >= rangeStart && saleDate <= rangeEnd
       }),
     [saleItems, rangeStart, rangeEnd]
   )
@@ -330,7 +331,7 @@ export function ReportsClient({
   // ── Product profitability ───────────────────────────────────────────────────
   const productRows = useMemo(() => {
     const map = new Map<string, { productName: string; revenue: number; cogs: number; qtySold: number }>()
-    for (const item of saleItems) {
+    for (const item of filteredSaleItems) {
       const qty = item.quantity_kg + item.quantity_units + item.quantity_boxes
       const cogs = item.cost_price_at_sale * qty
       const ex = map.get(item.product_id)
@@ -352,7 +353,7 @@ export function ReportsClient({
       grossProfit: r.revenue - r.cogs,
       margin: r.revenue > 0 ? ((r.revenue - r.cogs) / r.revenue) * 100 : 0,
     }))
-  }, [saleItems])
+  }, [filteredSaleItems])
 
   const sortedRows = useMemo(() => {
     return [...productRows].sort((a, b) => {

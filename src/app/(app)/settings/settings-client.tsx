@@ -111,19 +111,15 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
       toast.error("Enter a branch name")
       return
     }
-    if (plan && usage.branches >= plan.max_branches) {
-      toast.error(`Branch limit reached (${usage.branches}/${plan.max_branches}). Upgrade your plan to add more branches.`)
-      return
-    }
     setCreatingBranch(true)
-    const supabase = createClient()
-    const { error } = await supabase.from("branches").insert({
-      shop_id: session.shop_id,
-      name: newBranchName.trim(),
-      address: newBranchAddress || null,
+    const res = await fetch("/api/branches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newBranchName.trim(), address: newBranchAddress || null }),
     })
-    if (error) {
-      toast.error(error.message)
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to create branch")
     } else {
       toast.success("Branch created")
       setBranchDialogOpen(false)
@@ -266,6 +262,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
                 </div>
               </div>
               <Separator />
+              {plan?.feature_flags?.custom_branding !== false && (
               <div className="space-y-2">
                 <Label>Primary Colour</Label>
                 <div className="flex items-center gap-2">
@@ -297,6 +294,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
                   )}
                 </div>
               </div>
+              )}
               {canEditSettings && (
                 <Button onClick={saveGeneral} disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

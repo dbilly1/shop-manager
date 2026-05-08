@@ -3,10 +3,12 @@ import { getSessionContext } from "@/lib/session"
 import { getActiveBranchId } from "@/lib/branch-cookie"
 import { redirect } from "next/navigation"
 import { ExpensesClient } from "./expenses-client"
+import { canManageExpenses } from "@/lib/permissions"
 
 export default async function ExpensesPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+  if (!canManageExpenses(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)

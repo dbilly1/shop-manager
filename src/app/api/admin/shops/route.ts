@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { randomBytes } from "crypto"
 import { sendInviteEmail } from "@/lib/email"
+import { requireSuperAdmin } from "@/lib/auth-guard"
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const session = await requireSuperAdmin()
+  if (session instanceof NextResponse) return session
 
   const admin = createAdminClient()
-
-  // Verify super admin
-  const { data: superAdmin } = await admin.from("super_admins").select("id").eq("user_id", user.id).single()
-  if (!superAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { name, type, currency, plan_id, owner_email } = await req.json()
   if (!name?.trim() || !owner_email?.trim()) {
@@ -24,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { data: shop, error: shopError } = await admin.from("shops").insert({
     name: name.trim(),
     type: type ?? "general",
-    owner_id: user.id,
+    owner_id: session.user_id,
     plan_id: plan_id ?? null,
     currency: currency ?? "USD",
     country: "US",
@@ -73,7 +68,7 @@ export async function POST(req: NextRequest) {
       role: "owner",
       token,
       expires_at: expiresAt,
-      invited_by: user.id,
+      invited_by: session.user_id,
     })
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"

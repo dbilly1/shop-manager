@@ -68,6 +68,7 @@ interface BranchProduct {
     base_price: number;
     cost_price: number;
     reorder_threshold: number;
+    audit_threshold_pct: number | null;
   } | null;
 }
 
@@ -76,9 +77,11 @@ interface BulkRestockRow {
   product_id: string;
   product_name: string;
   unit_type: string;
+  units_per_box: number | null;   // pre-filled from product, editable
   qty: number;
   boxes: number;
-  cost_per_unit: number;
+  cost_per_unit: number;          // used when qty > 0
+  cost_per_box: number;           // used when boxes > 0
   supplier: string;
   notes: string;
 }
@@ -130,12 +133,26 @@ function emptyBulkRow(): BulkRestockRow {
     product_id: "",
     product_name: "",
     unit_type: "units",
+    units_per_box: null,
     qty: 0,
     boxes: 0,
     cost_per_unit: 0,
+    cost_per_box: 0,
     supplier: "",
     notes: "",
   };
+}
+
+/** Total cost for a single bulk row */
+function rowTotalCost(row: BulkRestockRow): number {
+  return (row.boxes > 0 ? row.boxes * row.cost_per_box : 0)
+       + (row.qty    > 0 ? row.qty    * row.cost_per_unit  : 0);
+}
+
+/** Derive cost_per_unit from cost_per_box when restocking in boxes */
+function costPerUnitFromBox(costPerBox: number, unitsPerBox: number | null): number {
+  if (!unitsPerBox || unitsPerBox <= 0) return 0;
+  return costPerBox / unitsPerBox;
 }
 
 export function InventoryClient({
@@ -226,6 +243,7 @@ export function InventoryClient({
   const [pUnitsPerBox, setPUnitsPerBox] = useState("");
   const [pSellingPrice, setPSellingPrice] = useState("");
   const [pLowStockThreshold, setPLowStockThreshold] = useState("5");
+  const [pAuditThreshold, setPAuditThreshold] = useState("");
   const [pOpeningQty, setPOpeningQty] = useState("");
   const [pOpeningBoxes, setPOpeningBoxes] = useState("");
   const [pOpeningCost, setPOpeningCost] = useState("");
@@ -235,7 +253,9 @@ export function InventoryClient({
   const [restockBp, setRestockBp] = useState<BranchProduct | null>(null);
   const [rQty, setRQty] = useState("");
   const [rBoxes, setRBoxes] = useState("");
+  const [rUnitsPerBox, setRUnitsPerBox] = useState("");   // editable qty/box
   const [rCostPerUnit, setRCostPerUnit] = useState("");
+  const [rCostPerBox, setRCostPerBox] = useState("");
   const [rSupplier, setRSupplier] = useState("");
   const [rNotes, setRNotes] = useState("");
   const [rSaving, setRSaving] = useState(false);
@@ -351,6 +371,7 @@ export function InventoryClient({
     setPUnitsPerBox("");
     setPSellingPrice("");
     setPLowStockThreshold("5");
+    setPAuditThreshold("");
     setPOpeningQty("");
     setPOpeningBoxes("");
     setPOpeningCost("");
@@ -372,6 +393,7 @@ export function InventoryClient({
       String(isAllBranchesView ? bp.product.base_price : (bp.override_price ?? bp.product.base_price)),
     );
     setPLowStockThreshold(String(bp.product.reorder_threshold));
+    setPAuditThreshold(bp.product.audit_threshold_pct != null ? String(bp.product.audit_threshold_pct) : "");
     setProductDialogOpen(true);
   }
 
@@ -393,6 +415,7 @@ export function InventoryClient({
           units_per_box: pUnitsPerBox ? parseFloat(pUnitsPerBox) : null,
           base_price: parseFloat(pSellingPrice),
           reorder_threshold: parseFloat(pLowStockThreshold) || 0,
+          audit_threshold_pct: pAuditThreshold ? parseFloat(pAuditThreshold) : null,
         })
         .eq("id", editingBp.product!.id);
       if (error) {
@@ -409,46 +432,32 @@ export function InventoryClient({
       }
       toast.success("Product updated");
     } else {
-      const { data: product, error } = await supabase
-        .from("products")
-        .insert({
-          shop_id: session.shop_id,
+      const targetBranchId = session.branch_id ?? selectedBranchId
+      const branchIds = targetBranchId ? [targetBranchId] : branches.map((b) => b.id)
+
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           name: pName.trim(),
           category: pCategory || null,
           unit_type: pUnitType,
-          units_per_box: pUnitsPerBox ? parseFloat(pUnitsPerBox) : null,
-          base_price: parseFloat(pSellingPrice),
-          cost_price: parseFloat(pOpeningCost) || 0,
-          reorder_threshold: parseFloat(pLowStockThreshold) || 0,
-          is_active: true,
-        })
-        .select()
-        .single();
-      if (error || !product) {
-        toast.error(error?.message ?? "Failed");
-        setPSaving(false);
-        return;
+          units_per_box: pUnitsPerBox || null,
+          base_price: pSellingPrice,
+          cost_price: pOpeningCost || "0",
+          reorder_threshold: pLowStockThreshold || "0",
+          audit_threshold_pct: pAuditThreshold || null,
+          opening_qty: pOpeningQty,
+          opening_boxes: pOpeningBoxes,
+          branch_ids: branchIds,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to create product")
+        setPSaving(false)
+        return
       }
-
-      const targetBranchId = session.branch_id ?? selectedBranchId
-      const branchList = targetBranchId
-        ? [{ id: targetBranchId }]
-        : branches;
-      const openingQty = parseFloat(pOpeningQty) || 0;
-      const openingBoxes = parseFloat(pOpeningBoxes) || 0;
-      const upb = pUnitsPerBox ? parseFloat(pUnitsPerBox) : 0;
-      const totalPrimary = openingQty + (upb > 0 ? openingBoxes * upb : 0);
-      await supabase.from("branch_products").insert(
-        branchList.map((b) => ({
-          shop_id: session.shop_id,
-          branch_id: b.id,
-          product_id: product.id,
-          is_active: true,
-          current_stock_kg: pUnitType === "kg" ? totalPrimary : 0,
-          current_stock_units: pUnitType === "units" ? totalPrimary : 0,
-          current_stock_boxes: 0,
-        })),
-      );
       toast.success("Product created");
     }
 
@@ -523,73 +532,76 @@ export function InventoryClient({
     setRestockBp(bp);
     setRQty("");
     setRBoxes("");
+    setRUnitsPerBox(String(bp.product?.units_per_box ?? ""));
     setRCostPerUnit(String(bp.product?.cost_price ?? ""));
+    const upb = bp.product?.units_per_box;
+    setRCostPerBox(upb && bp.product ? String((bp.product.cost_price * upb).toFixed(2)) : "");
     setRSupplier("");
     setRNotes("");
   }
 
   async function saveRestock() {
     if (!restockBp) return;
-    const qty = parseFloat(rQty) || 0;
+    const qty   = parseFloat(rQty)   || 0;
     const boxes = parseFloat(rBoxes) || 0;
-    if (qty === 0 && boxes === 0) {
-      toast.error("Enter quantity or boxes");
-      return;
-    }
-    const costPerUnit = parseFloat(rCostPerUnit) || 0;
+    if (qty === 0 && boxes === 0) { toast.error("Enter quantity or boxes"); return; }
+
+    const unitsPerBox    = parseFloat(rUnitsPerBox) || restockBp.product?.units_per_box || null;
+    const costPerBox     = parseFloat(rCostPerBox)  || 0;
+    const costPerUnitRaw = parseFloat(rCostPerUnit) || 0;
+
+    // If restocking in boxes, derive cost_per_unit from cost_per_box
+    const costPerUnit = boxes > 0 && costPerBox > 0 && unitsPerBox
+      ? costPerUnitFromBox(costPerBox, unitsPerBox)
+      : costPerUnitRaw;
 
     setRSaving(true);
     const supabase = createClient();
     const ut = restockBp.product?.unit_type ?? "units";
-    const boxPrimary = boxesToPrimary(boxes, restockBp.product?.units_per_box);
+    const boxPrimary  = boxesToPrimary(boxes, unitsPerBox);
     const totalPrimary = qty + boxPrimary;
+
+    // Update units_per_box on the product if it was changed
+    const originalUpb = restockBp.product?.units_per_box ?? null;
+    if (unitsPerBox && unitsPerBox !== originalUpb && restockBp.product) {
+      await supabase.from("products").update({ units_per_box: unitsPerBox }).eq("id", restockBp.product.id);
+    }
+
     const update: Record<string, number> = {};
-    if (ut === "kg")
-      update.current_stock_kg = restockBp.current_stock_kg + totalPrimary;
-    else
-      update.current_stock_units = restockBp.current_stock_units + totalPrimary;
+    if (ut === "kg") update.current_stock_kg    = restockBp.current_stock_kg    + totalPrimary;
+    else             update.current_stock_units  = restockBp.current_stock_units + totalPrimary;
 
     const { error } = await supabase
       .from("branch_products")
       .update({ ...update, updated_at: new Date().toISOString() })
       .eq("id", restockBp.id);
-    if (error) {
-      toast.error(error.message);
-      setRSaving(false);
-      return;
-    }
+    if (error) { toast.error(error.message); setRSaving(false); return; }
 
     // Weighted-average cost price update — only if a cost was provided
     if (costPerUnit > 0) {
-      const currentStock =
-        ut === "kg" ? restockBp.current_stock_kg : restockBp.current_stock_units;
+      const currentStock = ut === "kg" ? restockBp.current_stock_kg : restockBp.current_stock_units;
       const oldCost = restockBp.product?.cost_price ?? 0;
-      const newAvgCost =
-        currentStock + totalPrimary > 0
-          ? (currentStock * oldCost + totalPrimary * costPerUnit) /
-            (currentStock + totalPrimary)
-          : costPerUnit;
-      await supabase
-        .from("products")
-        .update({ cost_price: newAvgCost })
-        .eq("id", restockBp.product!.id);
+      const newAvgCost = currentStock + totalPrimary > 0
+        ? (currentStock * oldCost + totalPrimary * costPerUnit) / (currentStock + totalPrimary)
+        : costPerUnit;
+      await supabase.from("products").update({ cost_price: newAvgCost }).eq("id", restockBp.product!.id);
     }
 
-    await supabase
-      .from("restocks")
-      .insert({
-        shop_id: session.shop_id,
-        branch_id: restockBp.branch_id,
-        product_id: restockBp.product?.id,
-        quantity_kg: ut === "kg" ? totalPrimary : 0,
-        quantity_units: ut === "units" ? totalPrimary : 0,
-        quantity_boxes: boxes,
-        cost_per_unit: costPerUnit,
-        supplier: rSupplier || null,
-        notes: rNotes || null,
-        recorded_by: session.user_id,
-      })
-      .maybeSingle();
+    await supabase.from("restocks").insert({
+      shop_id:                  session.shop_id,
+      branch_id:                restockBp.branch_id,
+      product_id:               restockBp.product?.id,
+      quantity_kg:              ut === "kg" ? totalPrimary : 0,
+      quantity_units:           ut === "units" ? totalPrimary : 0,
+      quantity_boxes:           boxes,
+      cost_per_unit:            costPerUnit,
+      cost_per_box:             boxes > 0 ? costPerBox : null,
+      units_per_box_at_restock: boxes > 0 ? unitsPerBox : null,
+      supplier:                 rSupplier || null,
+      notes:                    rNotes    || null,
+      recorded_by:              session.user_id,
+      recorded_by_name:         session.full_name ?? null,
+    }).maybeSingle();
 
     toast.success("Stock updated");
     setRestockBp(null);
@@ -608,15 +620,36 @@ export function InventoryClient({
       if (field === "branch_product_id") {
         const bp = branchProducts.find((p) => p.id === value);
         if (bp?.product) {
+          const upb = bp.product.units_per_box ?? null;
           next[idx] = {
             ...next[idx],
             branch_product_id: bp.id,
-            product_id: bp.product.id,
-            product_name: bp.product.name,
-            unit_type: bp.product.unit_type,
-            cost_per_unit: bp.product.cost_price,
+            product_id:        bp.product.id,
+            product_name:      bp.product.name,
+            unit_type:         bp.product.unit_type,
+            units_per_box:     upb,
+            cost_per_unit:     bp.product.cost_price,
+            cost_per_box:      upb ? bp.product.cost_price * upb : 0,
           };
         }
+      } else if (field === "cost_per_box") {
+        // Auto-derive cost_per_unit when cost_per_box changes
+        const row = next[idx];
+        const cpb = Number(value);
+        next[idx] = {
+          ...row,
+          cost_per_box:  cpb,
+          cost_per_unit: costPerUnitFromBox(cpb, row.units_per_box),
+        };
+      } else if (field === "cost_per_unit") {
+        // Auto-derive cost_per_box when cost_per_unit changes
+        const row = next[idx];
+        const cpu = Number(value);
+        next[idx] = {
+          ...row,
+          cost_per_unit: cpu,
+          cost_per_box:  row.units_per_box ? cpu * row.units_per_box : 0,
+        };
       } else {
         next[idx] = { ...next[idx], [field]: value };
       }
@@ -639,50 +672,58 @@ export function InventoryClient({
       const bp = branchProducts.find((p) => p.id === row.branch_product_id);
       if (!bp) continue;
       const ut = row.unit_type;
-      const boxPrimary = boxesToPrimary(row.boxes, bp.product?.units_per_box);
+
+      // Resolve units_per_box: use row value (user may have edited it)
+      const unitsPerBox = row.units_per_box;
+      const boxPrimary  = boxesToPrimary(row.boxes, unitsPerBox);
       const totalPrimary = row.qty + boxPrimary;
+
+      // Resolve effective cost_per_unit
+      // If restocked in boxes → derive from cost_per_box; otherwise use cost_per_unit directly
+      const effectiveCpu = row.boxes > 0 && row.cost_per_box > 0 && unitsPerBox
+        ? costPerUnitFromBox(row.cost_per_box, unitsPerBox)
+        : row.cost_per_unit;
+
+      // Update units_per_box on product if it was changed
+      const originalUpb = bp.product?.units_per_box ?? null;
+      if (unitsPerBox && unitsPerBox !== originalUpb && bp.product) {
+        await supabase.from("products").update({ units_per_box: unitsPerBox }).eq("id", bp.product.id);
+      }
 
       // Stock update
       const update: Record<string, number> = {};
-      if (ut === "kg")
-        update.current_stock_kg = bp.current_stock_kg + totalPrimary;
-      else update.current_stock_units = bp.current_stock_units + totalPrimary;
+      if (ut === "kg") update.current_stock_kg    = bp.current_stock_kg    + totalPrimary;
+      else             update.current_stock_units  = bp.current_stock_units + totalPrimary;
       await supabase
         .from("branch_products")
         .update({ ...update, updated_at: new Date().toISOString() })
         .eq("id", bp.id);
 
-      // Weighted-average cost price update — only if a cost was provided
-      if (row.cost_per_unit > 0) {
-        const currentStock =
-          ut === "kg" ? bp.current_stock_kg : bp.current_stock_units;
+      // Weighted-average cost price update
+      if (effectiveCpu > 0) {
+        const currentStock = ut === "kg" ? bp.current_stock_kg : bp.current_stock_units;
         const oldCost = bp.product?.cost_price ?? 0;
-        const newAvgCost =
-          currentStock + totalPrimary > 0
-            ? (currentStock * oldCost + totalPrimary * row.cost_per_unit) /
-              (currentStock + totalPrimary)
-            : row.cost_per_unit;
-        await supabase
-          .from("products")
-          .update({ cost_price: newAvgCost })
-          .eq("id", row.product_id);
+        const newAvgCost = currentStock + totalPrimary > 0
+          ? (currentStock * oldCost + totalPrimary * effectiveCpu) / (currentStock + totalPrimary)
+          : effectiveCpu;
+        await supabase.from("products").update({ cost_price: newAvgCost }).eq("id", row.product_id);
       }
 
-      await supabase
-        .from("restocks")
-        .insert({
-          shop_id: session.shop_id,
-          branch_id: bp.branch_id,
-          product_id: row.product_id,
-          quantity_kg: ut === "kg" ? totalPrimary : 0,
-          quantity_units: ut === "units" ? totalPrimary : 0,
-          quantity_boxes: row.boxes,
-          cost_per_unit: row.cost_per_unit,
-          supplier: row.supplier || null,
-          notes: row.notes || null,
-          recorded_by: session.user_id,
-        })
-        .maybeSingle();
+      await supabase.from("restocks").insert({
+        shop_id:                  session.shop_id,
+        branch_id:                bp.branch_id,
+        product_id:               row.product_id,
+        quantity_kg:              ut === "kg" ? totalPrimary : 0,
+        quantity_units:           ut === "units" ? totalPrimary : 0,
+        quantity_boxes:           row.boxes,
+        cost_per_unit:            effectiveCpu,
+        cost_per_box:             row.boxes > 0 ? row.cost_per_box : null,
+        units_per_box_at_restock: row.boxes > 0 ? unitsPerBox : null,
+        supplier:                 row.supplier || null,
+        notes:                    row.notes    || null,
+        recorded_by:              session.user_id,
+        recorded_by_name:         session.full_name ?? null,
+      }).maybeSingle();
     }
 
     toast.success(`${validRows.length} product(s) restocked`);
@@ -1175,6 +1216,30 @@ export function InventoryClient({
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label>
+                Audit Variance Threshold{" "}
+                <span className="text-muted-foreground text-xs">(optional — default 5%)</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="any"
+                  value={pAuditThreshold}
+                  onChange={(e) => setPAuditThreshold(e.target.value)}
+                  placeholder="5"
+                  className="pr-8"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  %
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Variance above this % is flagged in stock audits. Leave blank to use the shop default.
+              </p>
+            </div>
 
             {!editingBp && (
               <div className="border-t pt-3 space-y-3">
@@ -1367,128 +1432,118 @@ export function InventoryClient({
       </Dialog>
 
       {/* ── Single Restock Dialog ── */}
-      <Dialog
-        open={!!restockBp}
-        onOpenChange={(v) => {
-          if (!v) setRestockBp(null);
-        }}
-      >
+      <Dialog open={!!restockBp} onOpenChange={(v) => { if (!v) setRestockBp(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{restockBp?.product?.name ?? "Restock"}</DialogTitle>
           </DialogHeader>
-          {restockBp && (
-            <div className="space-y-3 mt-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Qty ({restockBp.product?.unit_type})</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={rQty}
-                    onChange={(e) => setRQty(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                {hasBoxes(restockBp.product?.units_per_box) && (
+          {restockBp && (() => {
+            const upb      = restockBp.product?.units_per_box;
+            const hasBox   = hasBoxes(upb);
+            const qtyVal   = parseFloat(rQty)   || 0;
+            const boxesVal = parseFloat(rBoxes)  || 0;
+            const upbVal   = parseFloat(rUnitsPerBox) || upb || null;
+            const boxPrim  = boxesToPrimary(boxesVal, upbVal);
+            const totalPrim = qtyVal + boxPrim;
+            const showCostPerBox  = boxesVal > 0;
+            const showCostPerUnit = qtyVal > 0 || !showCostPerBox;
+            return (
+              <div className="space-y-3 mt-2">
+                {/* Qty + Boxes */}
+                <div className={`grid gap-3 ${hasBox ? "grid-cols-2" : "grid-cols-1"}`}>
                   <div className="space-y-1.5">
-                    <Label>Boxes</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={rBoxes}
-                      onChange={(e) => setRBoxes(e.target.value)}
-                      placeholder="0"
-                    />
+                    <Label>Qty ({restockBp.product?.unit_type})</Label>
+                    <Input type="number" min={0} step="any" value={rQty}
+                      onChange={(e) => setRQty(e.target.value)} placeholder="0" />
+                  </div>
+                  {hasBox && (
+                    <div className="space-y-1.5">
+                      <Label>Boxes</Label>
+                      <Input type="number" min={0} step="any" value={rBoxes}
+                        onChange={(e) => setRBoxes(e.target.value)} placeholder="0" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Units/Box — shown when product supports boxes */}
+                {hasBox && (
+                  <div className="space-y-1.5">
+                    <Label>
+                      Units / Box
+                      <span className="ml-1 text-xs text-muted-foreground">(from system — edit to update)</span>
+                    </Label>
+                    <Input type="number" min={1} step="any" value={rUnitsPerBox}
+                      onChange={(e) => {
+                        setRUnitsPerBox(e.target.value);
+                        // Keep cost_per_box in sync with new upb if cost_per_unit was set
+                        const cpu = parseFloat(rCostPerUnit) || 0;
+                        if (cpu > 0) setRCostPerBox(String((cpu * (parseFloat(e.target.value) || 1)).toFixed(2)));
+                      }}
+                      placeholder={String(upb ?? "")} />
                   </div>
                 )}
-              </div>
-              {hasBoxes(restockBp.product?.units_per_box) &&
-                parseFloat(rBoxes) > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {rBoxes} box{parseFloat(rBoxes) !== 1 ? "es" : ""} ×{" "}
-                    {restockBp.product?.units_per_box}{" "}
-                    {restockBp.product?.unit_type} ={" "}
-                    {boxesToPrimary(
-                      parseFloat(rBoxes),
-                      restockBp.product?.units_per_box,
-                    )}{" "}
-                    {restockBp.product?.unit_type}
-                    {parseFloat(rQty) > 0 &&
-                      ` + ${rQty} direct = ${(parseFloat(rQty) || 0) + boxesToPrimary(parseFloat(rBoxes), restockBp.product?.units_per_box)} total`}
+
+                {/* Conversion hint */}
+                {hasBox && boxesVal > 0 && upbVal && (
+                  <p className="text-xs text-muted-foreground rounded-md bg-muted/50 px-3 py-1.5">
+                    {boxesVal} box{boxesVal !== 1 ? "es" : ""} × {upbVal} {restockBp.product?.unit_type} = {boxPrim} {restockBp.product?.unit_type}
+                    {qtyVal > 0 && ` + ${qtyVal} direct = ${totalPrim} total`}
                   </p>
                 )}
-              <div className="space-y-1.5">
-                <Label>
-                  Cost Price per Unit
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={rCostPerUnit}
-                  onChange={(e) => setRCostPerUnit(e.target.value)}
-                  placeholder="0.00"
-                />
+
+                {/* Cost inputs — adaptive */}
+                <div className={showCostPerBox && showCostPerUnit ? "grid grid-cols-2 gap-3" : ""}>
+                  {showCostPerBox && (
+                    <div className="space-y-1.5">
+                      <Label>Cost / Box</Label>
+                      <Input type="number" min={0} step="any" value={rCostPerBox}
+                        onChange={(e) => {
+                          setRCostPerBox(e.target.value);
+                          const cpb = parseFloat(e.target.value) || 0;
+                          if (upbVal) setRCostPerUnit(String((cpb / upbVal).toFixed(4)));
+                        }}
+                        placeholder="0.00" />
+                    </div>
+                  )}
+                  {showCostPerUnit && (
+                    <div className="space-y-1.5">
+                      <Label>Cost / {restockBp.product?.unit_type === "kg" ? "kg" : "unit"}</Label>
+                      <Input type="number" min={0} step="any" value={rCostPerUnit}
+                        onChange={(e) => {
+                          setRCostPerUnit(e.target.value);
+                          const cpu = parseFloat(e.target.value) || 0;
+                          if (upbVal) setRCostPerBox(String((cpu * upbVal).toFixed(2)));
+                        }}
+                        placeholder="0.00" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Supplier + Notes */}
+                <div className="space-y-1.5">
+                  <Label>Supplier <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                  <Input value={rSupplier} onChange={(e) => setRSupplier(e.target.value)} placeholder="Supplier name" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                  <Input value={rNotes} onChange={(e) => setRNotes(e.target.value)} placeholder="Any notes…" />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" className="flex-1" onClick={() => setRestockBp(null)}>Cancel</Button>
+                  <Button className="flex-1" onClick={saveRestock} disabled={rSaving}>
+                    {rSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Restock
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>
-                  Supplier{" "}
-                  <span className="text-muted-foreground text-xs">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  value={rSupplier}
-                  onChange={(e) => setRSupplier(e.target.value)}
-                  placeholder="Supplier name"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>
-                  Notes{" "}
-                  <span className="text-muted-foreground text-xs">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  value={rNotes}
-                  onChange={(e) => setRNotes(e.target.value)}
-                  placeholder="Any notes…"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setRestockBp(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={saveRestock}
-                  disabled={rSaving}
-                >
-                  {rSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Restock
-                </Button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
       {/* ── Bulk Restock Dialog ── */}
-      <Dialog
-        open={bulkRestockOpen}
-        onOpenChange={(v) => {
-          setBulkRestockOpen(v);
-          if (!v) setBulkRows([emptyBulkRow()]);
-        }}
-      >
+      <Dialog open={bulkRestockOpen} onOpenChange={(v) => { setBulkRestockOpen(v); if (!v) setBulkRows([emptyBulkRow()]); }}>
         <DialogContent className="w-5xl max-w-6xl sm:max-w-none p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
           <DialogHeader className="px-5 py-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
@@ -1496,178 +1551,166 @@ export function InventoryClient({
               Bulk Restock
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full text-sm table-fixed">
-              <colgroup>
-                <col />
-                <col className="w-[10%]" />
-                <col className="w-[10%]" />
-                <col className="w-[13%]" />
-                <col className="w-[16%]" />
-                <col className="w-[16%]" />
-                <col className="w-8" />
-              </colgroup>
+
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-sm">
               <thead className="sticky top-0 bg-background border-b z-10">
                 <tr>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">
-                    Product
-                  </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                    Qty
-                  </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                    Boxes
-                  </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                    Cost/Unit
-                  </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                    Supplier
-                  </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">
-                    Notes
-                  </th>
-                  <th />
+                  <th className="text-left text-xs font-medium text-muted-foreground px-3 py-2.5 w-8">#</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 min-w-[180px]">Product <span className="text-destructive">*</span></th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[100px]">Qty (primary)</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[80px]">Boxes</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[90px]">Units / Box</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[120px]">Cost <span className="text-destructive">*</span></th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[100px]">Total Cost</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[130px]">Supplier</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 w-[130px]">Notes</th>
+                  <th className="w-8" />
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {bulkRows.map((row, idx) => (
-                  <tr key={idx} className="group hover:bg-muted/20">
-                    <td className="px-3 py-2">
-                      <Select
-                        value={row.branch_product_id}
-                        onValueChange={(v) =>
-                          updateBulkRow(idx, "branch_product_id", v ?? "")
-                        }
-                      >
-                        <SelectTrigger className="h-8 text-sm w-full">
-                          <SelectValue placeholder="Select product…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {branchProducts.map(
-                            (bp) =>
-                              bp.product && (
-                                <SelectItem key={bp.id} value={bp.id}>
-                                  {bp.product.name}
-                                </SelectItem>
-                              ),
+                {bulkRows.map((row, idx) => {
+                  const showCostBox  = row.boxes > 0;
+                  const showCostUnit = row.qty > 0 || !showCostBox;
+                  const total = rowTotalCost(row);
+                  return (
+                    <tr key={idx} className="hover:bg-muted/20 align-top">
+                      {/* # */}
+                      <td className="px-3 py-2 text-muted-foreground text-xs pt-3">{idx + 1}</td>
+
+                      {/* Product */}
+                      <td className="px-2 py-2">
+                        <Select value={row.branch_product_id}
+                          onValueChange={(v) => updateBulkRow(idx, "branch_product_id", v ?? "")}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select product…" /></SelectTrigger>
+                          <SelectContent>
+                            {branchProducts.map((bp) => bp.product && (
+                              <SelectItem key={bp.id} value={bp.id}>{bp.product.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+
+                      {/* Qty (primary) */}
+                      <td className="px-2 py-2">
+                        <Input type="number" min={0} step="any" value={row.qty || ""}
+                          onChange={(e) => updateBulkRow(idx, "qty", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm" placeholder="0" />
+                      </td>
+
+                      {/* Boxes */}
+                      <td className="px-2 py-2">
+                        <Input type="number" min={0} step="any" value={row.boxes || ""}
+                          onChange={(e) => updateBulkRow(idx, "boxes", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm" placeholder="0"
+                          disabled={!row.branch_product_id} />
+                      </td>
+
+                      {/* Units / Box */}
+                      <td className="px-2 py-2">
+                        {row.units_per_box !== null && row.units_per_box !== undefined ? (
+                          <Input type="number" min={1} step="any" value={row.units_per_box || ""}
+                            onChange={(e) => {
+                              const upb = parseFloat(e.target.value) || 0;
+                              setBulkRows((prev) => {
+                                const next = [...prev];
+                                const cpu = next[idx].cost_per_unit;
+                                next[idx] = { ...next[idx], units_per_box: upb, cost_per_box: upb > 0 && cpu > 0 ? cpu * upb : next[idx].cost_per_box };
+                                return next;
+                              });
+                            }}
+                            className="h-8 text-sm" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground px-1">—</span>
+                        )}
+                      </td>
+
+                      {/* Cost — adaptive: Cost/Box when boxes>0, Cost/Unit when only qty>0, both when mixed */}
+                      <td className="px-2 py-2">
+                        <div className="space-y-1">
+                          {showCostBox && (
+                            <div className="relative">
+                              <Input type="number" min={0} step="any" value={row.cost_per_box || ""}
+                                onChange={(e) => updateBulkRow(idx, "cost_per_box", parseFloat(e.target.value) || 0)}
+                                className="h-8 text-sm pr-10" placeholder="0.00" />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">/box</span>
+                            </div>
                           )}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={row.qty || ""}
-                        onChange={(e) =>
-                          updateBulkRow(
-                            idx,
-                            "qty",
-                            parseFloat(e.target.value) || 0,
-                          )
-                        }
-                        className="h-8 text-sm"
-                        placeholder="0"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={row.boxes || ""}
-                        onChange={(e) =>
-                          updateBulkRow(
-                            idx,
-                            "boxes",
-                            parseFloat(e.target.value) || 0,
-                          )
-                        }
-                        className="h-8 text-sm"
-                        placeholder="0"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={row.cost_per_unit || ""}
-                        onChange={(e) =>
-                          updateBulkRow(
-                            idx,
-                            "cost_per_unit",
-                            parseFloat(e.target.value) || 0,
-                          )
-                        }
-                        className="h-8 text-sm"
-                        placeholder="0.00"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        value={row.supplier}
-                        onChange={(e) =>
-                          updateBulkRow(idx, "supplier", e.target.value)
-                        }
-                        className="h-8 text-sm"
-                        placeholder="Supplier…"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        value={row.notes}
-                        onChange={(e) =>
-                          updateBulkRow(idx, "notes", e.target.value)
-                        }
-                        className="h-8 text-sm"
-                        placeholder="Notes…"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <button
-                        onClick={() =>
-                          setBulkRows((prev) =>
-                            prev.filter((_, i) => i !== idx),
-                          )
-                        }
-                        className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                          {showCostUnit && (
+                            <div className="relative">
+                              <Input type="number" min={0} step="any" value={row.cost_per_unit || ""}
+                                onChange={(e) => updateBulkRow(idx, "cost_per_unit", parseFloat(e.target.value) || 0)}
+                                className={`h-8 text-sm pr-12 ${showCostBox ? "bg-muted/40" : ""}`}
+                                placeholder="0.00"
+                                readOnly={showCostBox && !!row.units_per_box}
+                                title={showCostBox && row.units_per_box ? "Auto-derived from Cost/Box ÷ Units/Box" : undefined} />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">/{row.unit_type === "kg" ? "kg" : "unit"}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Total Cost */}
+                      <td className="px-2 py-2 pt-3 text-sm font-medium">
+                        {total > 0 ? formatCurrency(total, currency) : <span className="text-muted-foreground">—</span>}
+                      </td>
+
+                      {/* Supplier */}
+                      <td className="px-2 py-2">
+                        <Input value={row.supplier}
+                          onChange={(e) => updateBulkRow(idx, "supplier", e.target.value)}
+                          className="h-8 text-sm" placeholder="Supplier…" />
+                      </td>
+
+                      {/* Notes */}
+                      <td className="px-2 py-2">
+                        <Input value={row.notes}
+                          onChange={(e) => updateBulkRow(idx, "notes", e.target.value)}
+                          className="h-8 text-sm" placeholder="Notes…" />
+                      </td>
+
+                      {/* Delete */}
+                      <td className="px-2 py-2">
+                        <button onClick={() => setBulkRows((prev) => prev.filter((_, i) => i !== idx))}
+                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-muted transition-colors">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3 bg-background">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                setBulkRows((prev) => [...prev, emptyBulkRow()])
-              }
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Row
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setBulkRestockOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button size="sm" onClick={saveBulkRestock} disabled={bulkSaving}>
-                {bulkSaving && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Save All
-              </Button>
+
+          {/* Footer */}
+          <div className="px-5 py-3 border-t shrink-0 bg-background">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="outline" onClick={() => setBulkRows((prev) => [...prev, emptyBulkRow()])}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add another product
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {bulkRows.filter((r) => r.branch_product_id && (r.qty > 0 || r.boxes > 0)).length} product(s)
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Total restock value</p>
+                  <p className="text-sm font-semibold text-primary">
+                    {formatCurrency(bulkRows.reduce((s, r) => s + rowTotalCost(r), 0), currency)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setBulkRestockOpen(false)}>Cancel</Button>
+                  <Button size="sm" onClick={saveBulkRestock} disabled={bulkSaving}>
+                    {bulkSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Truck className="mr-1.5 h-4 w-4" />
+                    Save {bulkRows.filter((r) => r.branch_product_id && (r.qty > 0 || r.boxes > 0)).length} Restocks
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </DialogContent>

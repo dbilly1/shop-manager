@@ -3,10 +3,16 @@ import { getSessionContext } from "@/lib/session"
 import { getActiveBranchId } from "@/lib/branch-cookie"
 import { redirect } from "next/navigation"
 import { ReportsClient } from "./reports-client"
+import { getPlanForShop, hasFeature } from "@/lib/plan-guard"
+import { canViewReports } from "@/lib/permissions"
 
 export default async function ReportsPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+
+  const plan = await getPlanForShop(session.shop_id!)
+  if (!hasFeature(plan, "advanced_reports")) redirect("/dashboard")
+  if (!canViewReports(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
@@ -41,11 +47,11 @@ export default async function ReportsPage() {
   if (activeBranchId) expensesQuery.eq("branch_id", activeBranchId)
   const { data: expenses } = await expensesQuery
 
-  // Sale items — all time (no date filter so Products tab always has data).
-  // sale_date is selected for optional client-side COGS period filtering.
+  // Sale items — all time (no server-side date filter so Products tab always has data).
+  // sale_date comes from the parent sales row via join for client-side date filtering.
   const saleItemsQuery = supabase
     .from("sale_items")
-    .select("sale_date, product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, cost_price_at_sale, product:products(name)")
+    .select("product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, cost_price_at_sale, product:products(name), sale:sales(sale_date)")
     .eq("shop_id", session.shop_id!)
   if (activeBranchId) saleItemsQuery.eq("branch_id", activeBranchId)
   const { data: saleItems } = await saleItemsQuery
@@ -91,7 +97,6 @@ export default async function ReportsPage() {
   const { data: shop } = await supabase.from("shops").select("currency").eq("id", session.shop_id!).single()
 
   type SbSaleItem = {
-    sale_date?: string
     product_id: string
     quantity_kg: number
     quantity_units: number
@@ -100,6 +105,7 @@ export default async function ReportsPage() {
     line_total: number
     cost_price_at_sale: number
     product: { name: string } | null
+    sale: { sale_date: string } | null
   }
 
   type SbReconciliation = {

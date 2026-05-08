@@ -10,6 +10,8 @@ import {
   canViewAuditLog,
   canManageCredit,
   canInitiateTransfers,
+  canManageStockAudits,
+  canViewHistory,
 } from "@/lib/permissions";
 import {
   LayoutDashboard,
@@ -21,8 +23,9 @@ import {
   ArrowLeftRight,
   Scale,
   BarChart3,
-  Bell,
   ClipboardList,
+  ClipboardCheck,
+  History,
   Users,
   UserCircle,
   Settings,
@@ -41,10 +44,12 @@ export function Sidebar({
   shopName,
   shopLogo,
   shopColour,
+  featureFlags = {},
 }: {
   shopName: string;
   shopLogo?: string | null;
   shopColour?: string | null;
+  featureFlags?: Record<string, boolean>;
 }) {
   const pathname = usePathname();
   const { role } = useSession();
@@ -104,24 +109,35 @@ export function Sidebar({
     },
     { href: "/adjustments", label: "Adjustments", icon: Sliders },
     {
+      href: "/stock-audits",
+      label: "Stock Audits",
+      icon: ClipboardCheck,
+      show: canManageStockAudits(role),
+    },
+    {
       href: "/transfers",
       label: "Transfers",
       icon: ArrowLeftRight,
-      show: canInitiateTransfers(role),
+      show: canInitiateTransfers(role) && featureFlags.stock_transfers !== false,
     },
     { href: "/reconciliation", label: "Reconciliation", icon: Scale },
     {
       href: "/reports",
       label: "Reports",
       icon: BarChart3,
-      show: canViewReports(role),
+      show: canViewReports(role) && featureFlags.advanced_reports !== false,
     },
-    { href: "/alerts", label: "Alerts", icon: Bell },
+    {
+      href: "/history",
+      label: "History",
+      icon: History,
+      show: canViewHistory(role),
+    },
     {
       href: "/audit",
       label: "Audit Log",
       icon: ClipboardList,
-      show: canViewAuditLog(role),
+      show: canViewAuditLog(role) && featureFlags.audit_log !== false,
     },
     { href: "/users", label: "Users", icon: Users },
     { href: "/customers", label: "Customers", icon: UserCircle },

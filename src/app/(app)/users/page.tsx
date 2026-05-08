@@ -3,10 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { UsersClient } from "./users-client"
+import { canManageStaff } from "@/lib/permissions"
 
 export default async function UsersPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+  if (!canManageStaff(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const admin = createAdminClient()

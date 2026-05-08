@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { logAuditAction } from "@/lib/audit-action"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -67,7 +68,7 @@ export function TransfersClient({ transfers, branches, products, session }: Prop
     }
     setLoading(true)
     const supabase = createClient()
-    const { error } = await supabase.from("stock_transfers").insert({
+    const { data: transfer, error } = await supabase.from("stock_transfers").insert({
       shop_id: session.shop_id,
       from_branch_id: fromBranch,
       to_branch_id: toBranch,
@@ -76,10 +77,17 @@ export function TransfersClient({ transfers, branches, products, session }: Prop
       reason: reason || null,
       requested_by: session.user_id,
       status: "pending",
-    })
+    }).select().single()
     if (error) {
       toast.error(error.message)
     } else {
+      await logAuditAction({
+        branchId: fromBranch,
+        action: "CREATE_TRANSFER",
+        entityType: "stock_transfer",
+        entityId: transfer?.id ?? "00000000-0000-0000-0000-000000000000",
+        newValues: { from_branch_id: fromBranch, to_branch_id: toBranch, product_id: productId, quantity: parseFloat(quantity), reason: reason || null },
+      })
       toast.success("Transfer request submitted")
       setOpen(false)
       router.refresh()

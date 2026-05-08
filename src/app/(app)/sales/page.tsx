@@ -81,7 +81,7 @@ export default async function SalesPage() {
     current_stock_kg: number
     current_stock_units: number
     current_stock_boxes: number
-    product: { id: string; name: string; unit_type: string; base_price: number; cost_price: number } | null
+    product: { id: string; name: string; unit_type: string; units_per_box: number | null; base_price: number; cost_price: number } | null
   }
 
   return (

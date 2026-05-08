@@ -3,10 +3,12 @@ import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { CreditClient } from "./credit-client"
 import { getActiveBranchId } from "@/lib/branch-cookie"
+import { canManageCredit } from "@/lib/permissions"
 
 export default async function CreditPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+  if (!canManageCredit(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)

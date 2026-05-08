@@ -18,6 +18,7 @@ interface Props {
   announcements: Announcement[]
   initialSelectedBranchId: string | null
   userEmail: string
+  featureFlags: Record<string, boolean>
   children: React.ReactNode
 }
 
@@ -28,6 +29,7 @@ export function AppShell({
   announcements,
   initialSelectedBranchId,
   userEmail,
+  featureFlags,
   children,
 }: Props) {
   const router = useRouter()
@@ -107,7 +109,7 @@ export function AppShell({
         value={{ branches, selectedBranchId, setSelectedBranchId: handleSetBranch, selectedBranch }}
       >
         <div className="flex h-screen bg-background">
-          <Sidebar shopName={shop?.name ?? "ShopManager"} shopLogo={shop?.logo_url} shopColour={shopColour} />
+          <Sidebar shopName={shop?.name ?? "ShopManager"} shopLogo={shop?.logo_url} shopColour={shopColour} featureFlags={featureFlags} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopNav userEmail={userEmail} userName={session.full_name ?? userEmail.split("@")[0] ?? "User"} />
             <AnnouncementBanner announcements={announcements} />

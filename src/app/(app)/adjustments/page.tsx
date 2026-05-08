@@ -4,10 +4,12 @@ import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { AdjustmentsClient } from "./adjustments-client"
 import { getActiveBranchId } from "@/lib/branch-cookie"
+import { canManageInventory } from "@/lib/permissions"
 
 export default async function AdjustmentsPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+  if (!canManageInventory(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-export type DatePreset = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"
+export type DatePreset = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month" | "last_30_days"
 
 interface Props {
   start: string
@@ -57,6 +57,12 @@ function getPresetRange(preset: DatePreset): [string, string] {
       const last = new Date(now.getFullYear(), now.getMonth(), 0)
       return [toISO(first), toISO(last)]
     }
+
+    case "last_30_days": {
+      const d = new Date(now)
+      d.setDate(d.getDate() - 29)
+      return [toISO(d), today]
+    }
   }
 }
 
@@ -67,11 +73,21 @@ const PRESETS: { label: string; key: DatePreset }[] = [
   { label: "Last Week", key: "last_week" },
   { label: "This Month", key: "this_month" },
   { label: "Last Month", key: "last_month" },
+  { label: "Last 30 Days", key: "last_30_days" },
 ]
 
 export function DateRangeFilter({ start, end, onChange }: Props) {
   const today = toISO(new Date())
-  const [activePreset, setActivePreset] = useState<DatePreset | null>(null)
+
+  function detectPreset(s: string, e: string): DatePreset | null {
+    for (const { key } of PRESETS) {
+      const [ps, pe] = getPresetRange(key)
+      if (ps === s && pe === e) return key
+    }
+    return null
+  }
+
+  const [activePreset, setActivePreset] = useState<DatePreset | null>(() => detectPreset(start, end))
 
   function handlePreset(key: DatePreset) {
     const range = getPresetRange(key)

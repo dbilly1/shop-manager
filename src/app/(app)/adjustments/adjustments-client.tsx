@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logAuditAction } from "@/lib/audit-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -201,10 +202,17 @@ export function AdjustmentsClient({
           .eq("id", bpId);
       }
 
+      await logAuditAction({
+        branchId: bp.branch_id,
+        action: "CREATE_ADJUSTMENT",
+        entityType: "stock_adjustment",
+        entityId: adj.id,
+        newValues: { adjustment_type: adjType, quantity: qty, reason, status: "approved", product_id: bp.product.id },
+      });
       toast.success("Adjustment applied");
     } else {
       // Everyone else: insert as pending for GM / owner to review
-      const { error } = await supabase.from("stock_adjustments").insert({
+      const { data: pendingAdj, error } = await supabase.from("stock_adjustments").insert({
         shop_id: session.shop_id,
         branch_id: bp.branch_id,
         product_id: bp.product.id,
@@ -215,12 +223,19 @@ export function AdjustmentsClient({
         adjusted_by: session.user_id,
         adjuster_name: adjusterName,
         status: "pending",
-      });
+      }).select().single();
       if (error) {
         toast.error(error.message);
         setLoading(false);
         return;
       }
+      await logAuditAction({
+        branchId: bp.branch_id,
+        action: "CREATE_ADJUSTMENT",
+        entityType: "stock_adjustment",
+        entityId: pendingAdj?.id ?? "00000000-0000-0000-0000-000000000000",
+        newValues: { adjustment_type: adjType, quantity: qty, reason, status: "pending", product_id: bp.product.id },
+      });
       toast.success("Adjustment submitted for approval");
     }
 

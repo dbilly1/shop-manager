@@ -3,10 +3,12 @@ import { getSessionContext } from "@/lib/session"
 import { getActiveBranchId } from "@/lib/branch-cookie"
 import { redirect } from "next/navigation"
 import { InventoryClient } from "./inventory-client"
+import { canManageInventory } from "@/lib/permissions"
 
 export default async function InventoryPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+  if (!canManageInventory(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
@@ -15,7 +17,7 @@ export default async function InventoryPage() {
   // all branches so the client can aggregate them into one row per product.
   let branchProductsQuery = supabase
     .from("branch_products")
-    .select("*, product:products(id, name, sku, category, unit_type, units_per_box, base_price, cost_price, reorder_threshold)")
+    .select("*, product:products(id, name, sku, category, unit_type, units_per_box, base_price, cost_price, reorder_threshold, audit_threshold_pct)")
     .eq("shop_id", session.shop_id!)
     .eq("is_active", true)
     .order("product(name)")

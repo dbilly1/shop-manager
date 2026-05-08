@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logAuditAction } from "@/lib/audit-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -215,6 +216,13 @@ export function ExpensesClient({
         return;
       }
 
+      await logAuditAction({
+        branchId,
+        action: "CREATE_EXPENSE",
+        entityType: "expense",
+        entityId: (data as Expense).id,
+        newValues: { amount: parsedAmount, category, description: description.trim() },
+      });
       setExpenses((prev) => [data as Expense, ...prev]);
       toast.success("Expense recorded");
     }

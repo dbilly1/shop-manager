@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
 import { canBackdateSales } from "@/lib/permissions"
+import { logAuditAction } from "@/lib/audit-action"
 import { BulkEntryDialog } from "./bulk/bulk-sale-form"
 
 interface BranchProduct {
@@ -27,7 +28,7 @@ interface BranchProduct {
   current_stock_kg: number
   current_stock_units: number
   current_stock_boxes: number
-  product: { id: string; name: string; unit_type: string; base_price: number; cost_price: number } | null
+  product: { id: string; name: string; unit_type: string; units_per_box: number | null; base_price: number; cost_price: number } | null
 }
 
 interface SaleLineItem {
@@ -35,6 +36,7 @@ interface SaleLineItem {
   product_id: string
   product_name: string
   unit_type: string
+  units_per_box: number | null
   unit_price: number
   quantity: number
   boxes: number
@@ -54,12 +56,14 @@ interface DailySummary {
 
 interface SaleItem {
   id: string
+  branch_id: string
+  product_id: string
   quantity_kg: number
   quantity_units: number
   quantity_boxes: number
   unit_price: number
   line_total: number
-  product: { name: string; unit_type: string } | null
+  product: { name: string; unit_type: string; units_per_box: number | null } | null
 }
 
 interface IndividualSale {
@@ -84,11 +88,18 @@ interface FullSalePatch {
   notes?: string | null
   items?: Array<{
     id: string
+    branch_id: string
+    product_id: string
+    unit_type: string
+    units_per_box: number | null
     quantity_kg: number
     quantity_units: number
     quantity_boxes: number
     unit_price: number
     line_total: number
+    orig_quantity_kg: number
+    orig_quantity_units: number
+    orig_quantity_boxes: number
   }>
 }
 
@@ -112,9 +123,11 @@ function paymentBadge(method: string) {
 
 function getQtyDisplay(item: SaleItem) {
   const ut = item.product?.unit_type ?? "units"
-  if (ut === "kg" && item.quantity_kg > 0) return `${item.quantity_kg} kg`
-  if (ut === "boxes" && item.quantity_boxes > 0) return `${item.quantity_boxes} boxes`
-  return `${item.quantity_units} units`
+  const parts: string[] = []
+  if (ut === "kg" && item.quantity_kg > 0) parts.push(`${item.quantity_kg} kg`)
+  else if (item.quantity_units > 0) parts.push(`${item.quantity_units} units`)
+  if (item.quantity_boxes > 0) parts.push(`${item.quantity_boxes} box${item.quantity_boxes !== 1 ? "es" : ""}`)
+  return parts.length > 0 ? parts.join(" + ") : "—"
 }
 
 function SaleCard({
@@ -180,15 +193,25 @@ function EditSaleDialog({
     id: string
     product_name: string
     unit_type: string
+    units_per_box: number | null
     quantity: number
+    boxes: number
     unit_price: number
   }
 
   function initItems(): EditItem[] {
     return sale.sale_items.map((item) => {
       const ut = item.product?.unit_type ?? "units"
-      const qty = ut === "kg" ? item.quantity_kg : ut === "boxes" ? item.quantity_boxes : item.quantity_units
-      return { id: item.id, product_name: item.product?.name ?? "Item", unit_type: ut, quantity: qty, unit_price: item.unit_price }
+      const qty = ut === "kg" ? item.quantity_kg : item.quantity_units
+      return {
+        id: item.id,
+        product_name: item.product?.name ?? "Item",
+        unit_type: ut,
+        units_per_box: item.product?.units_per_box ?? null,
+        quantity: qty,
+        boxes: item.quantity_boxes,
+        unit_price: item.unit_price,
+      }
     })
   }
 
@@ -199,11 +222,16 @@ function EditSaleDialog({
   const [editItems, setEditItems] = useState<EditItem[]>(initItems)
   const [saving, setSaving] = useState(false)
 
-  function updateItem(idx: number, field: "quantity" | "unit_price", value: number) {
+  function updateItem(idx: number, field: "quantity" | "boxes" | "unit_price", value: number) {
     setEditItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item))
   }
 
-  const newTotal = editItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+  function itemLineTotal(item: EditItem): number {
+    const boxAmt = item.units_per_box ? item.unit_price * item.units_per_box * item.boxes : 0
+    return Math.max(0, item.unit_price * item.quantity + boxAmt)
+  }
+
+  const newTotal = editItems.reduce((s, i) => s + itemLineTotal(i), 0)
 
   async function handleSave() {
     if (paymentMethod === "credit" && !customerId) {
@@ -217,14 +245,24 @@ function EditSaleDialog({
       customer_id: paymentMethod === "credit" ? customerId || null : null,
       total_amount: newTotal,
       notes: notes.trim() || null,
-      items: editItems.map((item) => ({
-        id: item.id,
-        quantity_kg: item.unit_type === "kg" ? item.quantity : 0,
-        quantity_units: item.unit_type === "units" ? item.quantity : 0,
-        quantity_boxes: item.unit_type === "boxes" ? item.quantity : 0,
-        unit_price: item.unit_price,
-        line_total: item.unit_price * item.quantity,
-      })),
+      items: editItems.map((item) => {
+        const orig = sale.sale_items.find((s) => s.id === item.id)
+        return {
+          id: item.id,
+          branch_id: orig?.branch_id ?? "",
+          product_id: orig?.product_id ?? "",
+          unit_type: item.unit_type,
+          units_per_box: item.units_per_box,
+          quantity_kg: item.unit_type === "kg" ? item.quantity : 0,
+          quantity_units: item.unit_type === "units" ? item.quantity : 0,
+          quantity_boxes: item.boxes,
+          unit_price: item.unit_price,
+          line_total: itemLineTotal(item),
+          orig_quantity_kg: orig?.quantity_kg ?? 0,
+          orig_quantity_units: orig?.quantity_units ?? 0,
+          orig_quantity_boxes: orig?.quantity_boxes ?? 0,
+        }
+      }),
     })
     setSaving(false)
   }
@@ -273,10 +311,22 @@ function EditSaleDialog({
                         className="h-8 text-sm"
                       />
                     </div>
+                    {item.units_per_box ? (
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Boxes</Label>
+                        <Input
+                          type="number" min={0} step="any"
+                          value={item.boxes || ""}
+                          placeholder="0"
+                          onChange={(e) => updateItem(idx, "boxes", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    ) : <div />}
                   </div>
                   <div className="flex justify-end">
                     <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                      {formatCurrency(item.unit_price * item.quantity, currency)}
+                      {formatCurrency(itemLineTotal(item), currency)}
                     </span>
                   </div>
                 </div>
@@ -378,7 +428,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [dateSales, setDateSales] = useState<IndividualSale[]>([])
   const [dateLoading, setDateLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<IndividualSale | null>(null)
   const [editingSale, setEditingSale] = useState<IndividualSale | null>(null)
 
   const fetchSalesForDate = useCallback(async (date: string): Promise<IndividualSale[]> => {
@@ -386,7 +436,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     const branchId = session.branch_id ?? selectedBranchId
     let q = supabase
       .from("sales")
-      .select("id, sale_date, total_amount, payment_method, customer_id, created_at, recorded_by, recorded_by_name, notes, batch_id, sale_items(id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type))")
+      .select("id, sale_date, total_amount, payment_method, customer_id, created_at, recorded_by, recorded_by_name, notes, batch_id, sale_items(id, branch_id, product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type, units_per_box)))")
       .eq("shop_id", session.shop_id!)
       .eq("sale_date", date)
       .order("created_at", { ascending: false })
@@ -429,6 +479,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
       product_id: bp.product!.id,
       product_name: bp.product!.name,
       unit_type: bp.product!.unit_type,
+      units_per_box: bp.product!.units_per_box ?? null,
       unit_price: bp.override_price ?? bp.product!.base_price,
       quantity: 1,
       boxes: 0,
@@ -445,7 +496,10 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setLines((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  const subtotal = lines.reduce((s, l) => s + l.unit_price * l.quantity, 0)
+  const subtotal = lines.reduce((s, l) => {
+    const boxAmt = l.units_per_box ? l.unit_price * l.units_per_box * l.boxes : 0
+    return s + Math.max(0, l.unit_price * l.quantity + boxAmt - l.discount)
+  }, 0)
   const total = Math.max(0, subtotal - saleDiscount)
 
   async function handleSubmit() {
@@ -458,39 +512,38 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setError("")
     const supabase = createClient()
 
-    const { data: sale, error: saleError } = await supabase
-      .from("sales")
-      .insert({ shop_id: session.shop_id, branch_id: branchId, sale_date: saleDate, total_amount: total, payment_method: paymentMethod, customer_id: customerId || null, recorded_by: session.user_id, recorded_by_name: session.full_name ?? null, notes: notes || null })
-      .select().single()
+    // Build items for the atomic RPC — boxes convert to primary units server-side
+    const rpcItems = lines.map((l) => {
+      const boxAmt = l.units_per_box ? l.unit_price * l.units_per_box * l.boxes : 0
+      return {
+        branch_product_id: l.branch_product_id,
+        product_id: l.product_id,
+        quantity_kg: l.unit_type === "kg" ? l.quantity : 0,
+        quantity_units: l.unit_type === "units" ? l.quantity : 0,
+        quantity_boxes: l.boxes,
+        unit_price: l.unit_price,
+        discount_amount: l.discount,
+        line_total: Math.max(0, l.unit_price * l.quantity + boxAmt - l.discount),
+        cost_price_at_sale: l.cost_price,
+      }
+    })
 
-    if (saleError || !sale) { setError(saleError?.message ?? "Failed"); setLoading(false); return }
+    const { data: saleId, error: rpcError } = await supabase.rpc("create_sale_with_items", {
+      p_shop_id: session.shop_id,
+      p_branch_id: branchId,
+      p_sale_date: saleDate,
+      p_total_amount: total,
+      p_payment_method: paymentMethod,
+      p_customer_id: customerId || null,
+      p_recorded_by: session.user_id,
+      p_recorded_by_name: session.full_name ?? null,
+      p_notes: notes || null,
+      p_items: rpcItems,
+    })
 
-    const items = lines.map((l) => ({
-      sale_id: sale.id, shop_id: session.shop_id, branch_id: branchId, product_id: l.product_id,
-      quantity_kg: l.unit_type === "kg" ? l.quantity : 0,
-      quantity_units: l.unit_type === "units" ? l.quantity : 0,
-      quantity_boxes: l.unit_type === "boxes" ? l.boxes : 0,
-      unit_price: l.unit_price, discount_amount: l.discount,
-      line_total: l.unit_price * l.quantity - l.discount,
-      cost_price_at_sale: l.cost_price,
-    }))
-    const { error: itemsError } = await supabase.from("sale_items").insert(items)
-    if (itemsError) { setError(itemsError.message); setLoading(false); return }
+    if (rpcError || !saleId) { setError(rpcError?.message ?? "Failed to record sale"); setLoading(false); return }
 
-    for (const l of lines) {
-      const bp = branchProducts.find((p) => p.id === l.branch_product_id)
-      if (!bp) continue
-      const update: Record<string, number> = {}
-      if (l.unit_type === "kg") update.current_stock_kg = Math.max(0, bp.current_stock_kg - l.quantity)
-      else if (l.unit_type === "boxes") update.current_stock_boxes = Math.max(0, bp.current_stock_boxes - l.boxes)
-      else update.current_stock_units = Math.max(0, bp.current_stock_units - l.quantity)
-      await supabase.from("branch_products").update({ ...update, updated_at: new Date().toISOString() }).eq("id", bp.id)
-    }
-
-    if (paymentMethod === "credit" && customerId) {
-      await supabase.from("credit_sales").insert({ shop_id: session.shop_id, branch_id: branchId, sale_id: sale.id, customer_id: customerId, amount_owed: total, amount_paid: 0, balance: total })
-    }
-
+    void logAuditAction({ branchId, action: "CREATE_SALE", entityType: "sale", entityId: String(saleId), newValues: { total_amount: total, payment_method: paymentMethod, sale_date: saleDate, items_count: lines.length } })
     toast.success("Sale recorded")
     setLines([])
     setSaleDiscount(0)
@@ -520,21 +573,61 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setAddingCustomer(false)
   }
 
-  async function deleteSale(id: string) {
-    setDeletingId(id)
-    setDeleteConfirmId(null)
+  async function deleteSale(sale: IndividualSale) {
+    setDeletingId(sale.id)
+    setDeleteTarget(null)
     const supabase = createClient()
-    const { error } = await supabase.from("sales").delete().eq("id", id)
+
+    // Restore stock for each item before deleting
+    for (const item of sale.sale_items) {
+      const ut = item.product?.unit_type ?? "units"
+      const upb = item.product?.units_per_box ?? null
+      const boxPrimary = (item.quantity_boxes > 0 && upb) ? item.quantity_boxes * upb : 0
+      const { data: bp } = await supabase
+        .from("branch_products")
+        .select("current_stock_kg, current_stock_units")
+        .eq("branch_id", item.branch_id)
+        .eq("product_id", item.product_id)
+        .single()
+      if (!bp) continue
+      const update: Record<string, number> = {}
+      if (ut === "kg") update.current_stock_kg = bp.current_stock_kg + item.quantity_kg + boxPrimary
+      else update.current_stock_units = bp.current_stock_units + item.quantity_units + boxPrimary
+      await supabase.from("branch_products")
+        .update({ ...update, updated_at: new Date().toISOString() })
+        .eq("branch_id", item.branch_id)
+        .eq("product_id", item.product_id)
+    }
+
+    const { error } = await supabase.from("sales").delete().eq("id", sale.id)
     if (error) { toast.error(error.message); setDeletingId(null); return }
+
+    void logAuditAction({
+      branchId: sale.sale_items[0]?.branch_id ?? session.branch_id ?? "",
+      action: "DELETE_SALE",
+      entityType: "sale",
+      entityId: sale.id,
+      oldValues: {
+        total_amount: sale.total_amount,
+        payment_method: sale.payment_method,
+        sale_date: sale.sale_date,
+        items_count: sale.sale_items.length,
+      },
+    })
+
     toast.success("Sale deleted")
-    if (isSalesperson) setTodaySales((prev) => prev.filter((s) => s.id !== id))
-    else if (selectedDate) setDateSales((prev) => prev.filter((s) => s.id !== id))
+    if (isSalesperson) setTodaySales((prev) => prev.filter((s) => s.id !== sale.id))
+    else if (selectedDate) setDateSales((prev) => prev.filter((s) => s.id !== sale.id))
     router.refresh()
     setDeletingId(null)
   }
 
   async function updateSale(id: string, patch: FullSalePatch) {
     const supabase = createClient()
+
+    // Snapshot original sale for audit before any writes
+    const allSales = isSalesperson ? todaySales : dateSales
+    const originalSale = allSales.find((s) => s.id === id)
 
     // Build sales-table update (omit `items`)
     const { items, ...salePatch } = patch
@@ -543,7 +636,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
       if (error) { toast.error(error.message); return }
     }
 
-    // Update each sale_item
+    // Update each sale_item and apply stock delta
     if (items && items.length > 0) {
       for (const item of items) {
         const { error: ie } = await supabase
@@ -557,8 +650,72 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
           })
           .eq("id", item.id)
         if (ie) { toast.error(ie.message); return }
+
+        // Compute net primary-unit delta (old sold − new sold); positive = stock goes up
+        const upb = item.units_per_box
+        const oldBoxPrimary = (item.orig_quantity_boxes > 0 && upb) ? item.orig_quantity_boxes * upb : 0
+        const newBoxPrimary = (item.quantity_boxes > 0 && upb) ? item.quantity_boxes * upb : 0
+        const oldPrimary = item.unit_type === "kg" ? item.orig_quantity_kg : item.orig_quantity_units
+        const newPrimary = item.unit_type === "kg" ? item.quantity_kg : item.quantity_units
+        const delta = (oldPrimary + oldBoxPrimary) - (newPrimary + newBoxPrimary)
+
+        if (delta !== 0) {
+          const { data: bp } = await supabase
+            .from("branch_products")
+            .select("current_stock_kg, current_stock_units")
+            .eq("branch_id", item.branch_id)
+            .eq("product_id", item.product_id)
+            .single()
+          if (bp) {
+            const stockUpdate: Record<string, number> = {}
+            if (item.unit_type === "kg")
+              stockUpdate.current_stock_kg = Math.max(0, bp.current_stock_kg + delta)
+            else
+              stockUpdate.current_stock_units = Math.max(0, bp.current_stock_units + delta)
+            await supabase.from("branch_products")
+              .update({ ...stockUpdate, updated_at: new Date().toISOString() })
+              .eq("branch_id", item.branch_id)
+              .eq("product_id", item.product_id)
+          }
+        }
       }
     }
+
+    void logAuditAction({
+      branchId: patch.items?.[0]?.branch_id ?? session.branch_id ?? "",
+      action: "UPDATE_SALE",
+      entityType: "sale",
+      entityId: id,
+      oldValues: originalSale ? {
+        sale_date:      originalSale.sale_date,
+        payment_method: originalSale.payment_method,
+        total_amount:   originalSale.total_amount,
+        notes:          originalSale.notes,
+        items: originalSale.sale_items.map((si) => ({
+          id:             si.id,
+          product_name:   si.product?.name,
+          quantity_kg:    si.quantity_kg,
+          quantity_units: si.quantity_units,
+          quantity_boxes: si.quantity_boxes,
+          unit_price:     si.unit_price,
+          line_total:     si.line_total,
+        })),
+      } : undefined,
+      newValues: {
+        ...(patch.sale_date      !== undefined && { sale_date:       patch.sale_date }),
+        ...(patch.payment_method !== undefined && { payment_method:  patch.payment_method }),
+        ...(patch.total_amount   !== undefined && { total_amount:    patch.total_amount }),
+        ...(patch.notes          !== undefined && { notes:           patch.notes }),
+        ...(items && { items: items.map((i) => ({
+          id:             i.id,
+          quantity_kg:    i.quantity_kg,
+          quantity_units: i.quantity_units,
+          quantity_boxes: i.quantity_boxes,
+          unit_price:     i.unit_price,
+          line_total:     i.line_total,
+        })) }),
+      },
+    })
 
     // Apply patch to local state
     const applyPatch = (s: IndividualSale): IndividualSale => {
@@ -684,16 +841,18 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                         className="h-8 text-sm"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Boxes</Label>
-                      <Input
-                        type="number" min={0} step="any"
-                        value={line.boxes || ""}
-                        placeholder="0"
-                        onChange={(e) => updateLine(idx, "boxes", parseFloat(e.target.value) || 0)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
+                    {line.units_per_box ? (
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Boxes</Label>
+                        <Input
+                          type="number" min={0} step="any"
+                          value={line.boxes || ""}
+                          placeholder="0"
+                          onChange={(e) => updateLine(idx, "boxes", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    ) : <div />}
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Discount</Label>
                       <Input
@@ -707,7 +866,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                   </div>
                   <div className="mt-2 flex justify-end">
                     <span className="text-sm font-medium tabular-nums">
-                      {formatCurrency(Math.max(0, line.unit_price * line.quantity - line.discount), currency)}
+                      {formatCurrency(Math.max(0, line.unit_price * line.quantity + (line.units_per_box ? line.unit_price * line.units_per_box * line.boxes : 0) - line.discount), currency)}
                     </span>
                   </div>
                 </div>
@@ -847,7 +1006,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 <p className="text-center text-muted-foreground text-sm pt-12">No sales recorded today</p>
               ) : (
                 todaySales.map((sale) => (
-                  <SaleCard key={sale.id} sale={sale} currency={currency} deletingId={deletingId} onDelete={() => deleteSale(sale.id)} />
+                  <SaleCard key={sale.id} sale={sale} currency={currency} deletingId={deletingId} onDelete={() => deleteSale(sale)} />
                 ))
               )}
             </div>
@@ -984,7 +1143,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                                     <Pencil className="h-3 w-3" />
                                   </button>
                                   <button
-                                    onClick={() => setDeleteConfirmId(sale.id)}
+                                    onClick={() => setDeleteTarget(sale)}
                                     disabled={deletingId === sale.id}
                                     className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                                   >
@@ -1097,17 +1256,17 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
       </div>
 
       {/* ── Delete Confirm dialog ── */}
-      <Dialog open={!!deleteConfirmId} onOpenChange={(o) => { if (!o) setDeleteConfirmId(null) }}>
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Delete Sale?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">This will permanently remove the sale record and cannot be undone.</p>
           <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button
               variant="destructive"
               className="flex-1"
               disabled={!!deletingId}
-              onClick={() => { if (deleteConfirmId) deleteSale(deleteConfirmId) }}
+              onClick={() => { if (deleteTarget) deleteSale(deleteTarget) }}
             >
               {deletingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Delete

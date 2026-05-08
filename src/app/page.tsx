@@ -364,7 +364,7 @@ export default async function LandingPage() {
                 <div>
                   <div className="lp-mono" style={{ fontSize: "0.7rem", color: C.muted2, letterSpacing: "0.08em", marginBottom: "0.625rem" }}>{plan.name.toUpperCase()}</div>
                   <div className="lp-serif" style={{ fontSize: "2.25rem", fontWeight: 700, color: C.ivoryLight, lineHeight: 1 }}>
-                    {plan.price_monthly === 0 ? "Free" : `$${plan.price_monthly}`}
+                    {plan.price_monthly === 0 ? "Free" : `GH₵${plan.price_monthly}`}
                   </div>
                   {plan.price_monthly > 0 && <div style={{ fontSize: "0.8rem", color: C.muted, marginTop: "0.25rem" }}>per month</div>}
                 </div>

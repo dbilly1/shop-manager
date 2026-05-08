@@ -15,6 +15,7 @@ import { Plus, Trash2, Loader2, ShoppingCart } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
 import { canBackdateSales } from "@/lib/permissions"
+import { logAuditAction } from "@/lib/audit-action"
 
 interface BranchProduct {
   id: string
@@ -133,14 +134,14 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
       product_id: l.product_id,
       quantity_kg: l.unit_type === "kg" ? l.quantity : 0,
       quantity_units: l.unit_type === "units" ? l.quantity : 0,
-      quantity_boxes: l.unit_type === "boxes" ? l.quantity : 0,
+      quantity_boxes: 0,
       unit_price: l.unit_price,
       discount_amount: l.discount,
       line_total: l.unit_price * l.quantity - l.discount,
       cost_price_at_sale: l.cost_price,
     }))
 
-    const { error: rpcError } = await supabase.rpc("create_sale_with_items", {
+    const { data: saleId, error: rpcError } = await supabase.rpc("create_sale_with_items", {
       p_shop_id: session.shop_id,
       p_branch_id: branchId,
       p_sale_date: saleDate,
@@ -158,6 +159,14 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
       setLoading(false)
       return
     }
+
+    await logAuditAction({
+      branchId,
+      action: "CREATE_SALE",
+      entityType: "sale",
+      entityId: String(saleId ?? "00000000-0000-0000-0000-000000000000"),
+      newValues: { total_amount: total, payment_method: paymentMethod, sale_date: saleDate, items_count: items.length },
+    })
 
     toast.success("Sale recorded successfully")
     router.push("/sales")

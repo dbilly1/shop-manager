@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logAuditAction } from "@/lib/audit-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -212,7 +213,7 @@ export function CreditClient({
     setPayLoading(true);
     const branchId = session.branch_id ?? selectedGroup.branchId;
 
-    const { error } = await supabase.from("credit_payments").insert({
+    const { data: payment, error } = await supabase.from("credit_payments").insert({
       shop_id: session.shop_id,
       branch_id: branchId,
       customer_id: selectedGroup.customerId,
@@ -220,13 +221,21 @@ export function CreditClient({
       payment_method: payMethod,
       payment_date: payDate,
       recorded_by: session.user_id,
-    });
+    }).select().single();
 
     if (error) {
       toast.error(error.message);
       setPayLoading(false);
       return;
     }
+
+    await logAuditAction({
+      branchId,
+      action: "RECORD_CREDIT_PAYMENT",
+      entityType: "credit_payment",
+      entityId: payment?.id ?? "00000000-0000-0000-0000-000000000000",
+      newValues: { amount, payment_method: payMethod, customer_id: selectedGroup.customerId },
+    });
 
     // Reduce balances oldest-first
     let remaining = amount;

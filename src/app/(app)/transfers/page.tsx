@@ -2,10 +2,16 @@ import { createClient } from "@/lib/supabase/server"
 import { getSessionContext } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { TransfersClient } from "./transfers-client"
+import { getPlanForShop, hasFeature } from "@/lib/plan-guard"
+import { canInitiateTransfers } from "@/lib/permissions"
 
 export default async function TransfersPage() {
   const session = await getSessionContext()
   if (!session) redirect("/login")
+
+  const plan = await getPlanForShop(session.shop_id!)
+  if (!hasFeature(plan, "stock_transfers")) redirect("/dashboard")
+  if (!canInitiateTransfers(session.role!)) redirect("/dashboard")
 
   const supabase = await createClient()
 

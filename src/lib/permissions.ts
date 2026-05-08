@@ -54,6 +54,14 @@ export function canViewAuditLog(role: Role): boolean {
   return ["owner", "general_manager", "general_supervisor", "branch_manager"].includes(role)
 }
 
+export function canManageStockAudits(role: Role): boolean {
+  return ["owner", "general_manager", "general_supervisor", "branch_manager"].includes(role)
+}
+
 export function canManageShopSettings(role: Role): boolean {
   return role === "owner"
+}
+
+export function canViewHistory(role: Role): boolean {
+  return ["owner", "general_manager", "general_supervisor", "branch_manager", "branch_supervisor"].includes(role)
 }
