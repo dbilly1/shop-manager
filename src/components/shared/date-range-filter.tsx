@@ -2,12 +2,14 @@
 
 import { useState } from "react"
 
-export type DatePreset = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month" | "last_30_days"
+export type DatePreset = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"
 
 interface Props {
   start: string
   end: string
   onChange: (start: string, end: string) => void
+  /** Dates to revert to when an active preset is clicked again. Defaults to [today, today]. */
+  defaultRange?: [string, string]
 }
 
 function toISO(d: Date): string {
@@ -58,11 +60,6 @@ function getPresetRange(preset: DatePreset): [string, string] {
       return [toISO(first), toISO(last)]
     }
 
-    case "last_30_days": {
-      const d = new Date(now)
-      d.setDate(d.getDate() - 29)
-      return [toISO(d), today]
-    }
   }
 }
 
@@ -73,10 +70,9 @@ const PRESETS: { label: string; key: DatePreset }[] = [
   { label: "Last Week", key: "last_week" },
   { label: "This Month", key: "this_month" },
   { label: "Last Month", key: "last_month" },
-  { label: "Last 30 Days", key: "last_30_days" },
 ]
 
-export function DateRangeFilter({ start, end, onChange }: Props) {
+export function DateRangeFilter({ start, end, onChange, defaultRange }: Props) {
   const today = toISO(new Date())
 
   function detectPreset(s: string, e: string): DatePreset | null {
@@ -90,9 +86,15 @@ export function DateRangeFilter({ start, end, onChange }: Props) {
   const [activePreset, setActivePreset] = useState<DatePreset | null>(() => detectPreset(start, end))
 
   function handlePreset(key: DatePreset) {
-    const range = getPresetRange(key)
-    setActivePreset(key)
-    onChange(...range)
+    if (key === activePreset) {
+      // deselect — revert to the page's default range
+      const [ds, de] = defaultRange ?? [today, today]
+      setActivePreset(detectPreset(ds, de))
+      onChange(ds, de)
+    } else {
+      setActivePreset(key)
+      onChange(...getPresetRange(key))
+    }
   }
 
   function handleDateInput(newStart: string, newEnd: string) {

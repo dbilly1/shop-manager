@@ -401,7 +401,7 @@ export function ReportsClient({
             <TabsTrigger value="products">Products</TabsTrigger>
           </TabsList>
           <div className="flex flex-wrap items-center gap-2 px-4 md:px-6 py-3 border-b border-border">
-            <DateRangeFilter start={rangeStart} end={rangeEnd} onChange={handleRangeChange} />
+            <DateRangeFilter start={rangeStart} end={rangeEnd} onChange={handleRangeChange} defaultRange={[startDate, endDate]} />
           </div>
         </div>
 

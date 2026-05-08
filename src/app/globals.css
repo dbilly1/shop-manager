@@ -49,56 +49,56 @@
 }
 
 /* ── LIGHT MODE ─────────────────────────────────────────────────────────── */
-/* Warm ivory editorial palette                                               */
+/* Neutral gray palette                                                       */
 :root {
   /* ── Default brand tokens ── change BOTH values below together ── */
   --default-primary: #1b1a19; /* ← edit this to change the default button colour */
   --default-sidebar: #1b1a19; /* ← edit this (+ sidebar.tsx DEFAULT_SIDEBAR) for sidebar */
 
   /* Surfaces */
-  --background: oklch(0.987 0.002 78); /* toned-down warm white */
-  --foreground: oklch(0.142 0.004 78); /* #1a1a18 near-black     */
-  --card: oklch(1 0 0); /* pure white cards       */
-  --card-foreground: oklch(0.142 0.004 78);
+  --background: oklch(0.985 0 0);   /* neutral off-white         */
+  --foreground: oklch(0.145 0 0);   /* neutral near-black        */
+  --card: oklch(1 0 0);             /* pure white cards          */
+  --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.142 0.004 78);
+  --popover-foreground: oklch(0.145 0 0);
 
   /* Brand */
   --primary: #1b1a19; /* = --default-primary — update both together */
-  --primary-foreground: oklch(0.982 0.004 78);
-  --secondary: oklch(0.96 0.012 78); /* #f5f1ea ivory          */
-  --secondary-foreground: oklch(0.142 0.004 78);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.96 0 0);     /* light neutral gray        */
+  --secondary-foreground: oklch(0.145 0 0);
 
   /* UI tones */
-  --muted: oklch(0.94 0.009 78); /* warm light muted       */
-  --muted-foreground: oklch(0.48 0.008 78); /* #6b6862                */
-  --accent: oklch(0.94 0.009 78);
-  --accent-foreground: oklch(0.142 0.004 78);
+  --muted: oklch(0.94 0 0);         /* neutral muted background  */
+  --muted-foreground: oklch(0.50 0 0); /* neutral mid-gray        */
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0.145 0 0);
   --destructive: oklch(0.577 0.245 27.325);
 
   /* Borders & inputs */
-  --border: oklch(0.91 0.018 78); /* #e8e2d4 ivory border   */
-  --input: oklch(0.91 0.018 78);
-  --ring: oklch(0.142 0.004 78);
+  --border: oklch(0.91 0 0);        /* neutral gray border       */
+  --input: oklch(0.91 0 0);
+  --ring: oklch(0.145 0 0);
 
-  /* Charts — warm editorial palette */
-  --chart-1: oklch(0.65 0.14 35); /* amber                  */
-  --chart-2: oklch(0.6 0.1 160); /* sage green             */
-  --chart-3: oklch(0.55 0.1 270); /* dusty blue             */
-  --chart-4: oklch(0.62 0.1 310); /* muted purple           */
-  --chart-5: oklch(0.6 0.13 18); /* warm coral             */
+  /* Charts */
+  --chart-1: oklch(0.65 0.14 35);   /* amber                     */
+  --chart-2: oklch(0.6 0.1 160);    /* sage green                */
+  --chart-3: oklch(0.55 0.1 270);   /* dusty blue                */
+  --chart-4: oklch(0.62 0.1 310);   /* muted purple              */
+  --chart-5: oklch(0.6 0.13 18);    /* warm coral                */
 
   --radius: 0.5rem;
 
   /* Sidebar */
-  --sidebar: oklch(0.965 0.01 78); /* warm ivory sidebar */
-  --sidebar-foreground: oklch(0.142 0.004 78);
-  --sidebar-primary: oklch(0.142 0.004 78);
-  --sidebar-primary-foreground: oklch(0.965 0.01 78);
-  --sidebar-accent: oklch(0.91 0.018 78);
-  --sidebar-accent-foreground: oklch(0.142 0.004 78);
-  --sidebar-border: oklch(0.88 0.016 78);
-  --sidebar-ring: oklch(0.142 0.004 78);
+  --sidebar: oklch(0.96 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.145 0 0);
+  --sidebar-primary-foreground: oklch(0.96 0 0);
+  --sidebar-accent: oklch(0.91 0 0);
+  --sidebar-accent-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.88 0 0);
+  --sidebar-ring: oklch(0.145 0 0);
 }
 
 /* ── DARK MODE ──────────────────────────────────────────────────────────── */

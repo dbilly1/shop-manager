@@ -69,14 +69,15 @@ function Dash() { return <span className="text-muted-foreground/30">—</span> }
 
 // ─── Filter bar shared layout ─────────────────────────────────────────────────
 
-function FilterBar({ start, end, onDateChange, right }: {
+function FilterBar({ start, end, onDateChange, defaultRange, right }: {
   start: string; end: string
   onDateChange: (s: string, e: string) => void
+  defaultRange?: [string, string]
   right?: React.ReactNode
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 md:px-6 py-3 border-b border-border">
-      <DateRangeFilter start={start} end={end} onChange={onDateChange} />
+      <DateRangeFilter start={start} end={end} onChange={onDateChange} defaultRange={defaultRange} />
       {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
     </div>
   )
@@ -193,7 +194,7 @@ function RestocksTab({ session, branchId, currency }: { session: SessionContext;
   return (
     <>
       <FilterBar
-        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }}
+        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }} defaultRange={[today(), today()]}
         right={<ExportButtons onCSV={() => exportCSV(csvData(), `restocks-${start}-to-${end}.csv`)} onXLSX={() => exportXLSX(csvData() as Record<string, unknown>[], `restocks-${start}-to-${end}.xlsx`)} />}
       />
       <div className="px-4 md:px-6 pt-4 pb-6 space-y-4">
@@ -315,7 +316,7 @@ function AdjustmentsTab({ session, branchId, currency }: { session: SessionConte
   return (
     <>
       <FilterBar
-        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }}
+        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }} defaultRange={[today(), today()]}
         right={<ExportButtons onCSV={() => exportCSV(csvData(), `adjustments-${start}-to-${end}.csv`)} onXLSX={() => exportXLSX(csvData() as Record<string, unknown>[], `adjustments-${start}-to-${end}.xlsx`)} />}
       />
       <div className="px-4 md:px-6 pt-4 pb-6 space-y-4">
@@ -510,7 +511,7 @@ function StockAuditsTab({ session, branchId, currency, branches }: { session: Se
   return (
     <>
       <FilterBar
-        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }}
+        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }} defaultRange={[today(), today()]}
         right={<ExportButtons onCSV={() => exportCSV(csvData(), `stock-audits-${start}-to-${end}.csv`)} onXLSX={() => exportXLSX(csvData() as Record<string, unknown>[], `stock-audits-${start}-to-${end}.xlsx`)} />}
       />
       <div className="px-4 md:px-6 pt-4 pb-6 space-y-4">
@@ -730,7 +731,7 @@ function LossAnalysisTab({ session, branchId, currency }: { session: SessionCont
   return (
     <>
       <FilterBar
-        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }}
+        start={start} end={end} onDateChange={(s, e) => { setStart(s); setEnd(e) }} defaultRange={[today(), today()]}
         right={<ExportButtons onCSV={() => exportCSV(csvData(), `loss-analysis-${start}-to-${end}.csv`)} onXLSX={() => exportXLSX(csvData() as Record<string, unknown>[], `loss-analysis-${start}-to-${end}.xlsx`)} />}
       />
       <div className="px-4 md:px-6 pt-4 pb-6 space-y-4">

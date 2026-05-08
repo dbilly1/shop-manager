@@ -623,9 +623,6 @@ export function StockAuditsClient({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Stock Audits</h1>
-          <p className="text-sm text-muted-foreground">
-            Compare physical counts against system stock · variance threshold: {VARIANCE_THRESHOLD_PCT}%
-          </p>
         </div>
         <Button onClick={() => { setNewOpen(true); setNewType("full"); setSelectedPids([]); setNewNotes("") }}>
           <Plus className="mr-2 h-4 w-4" />

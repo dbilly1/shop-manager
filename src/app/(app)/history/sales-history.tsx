@@ -237,7 +237,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
       {/* Filter bar — sticky just below the top tabs */}
       <div className="sticky top-7 md:top-5 z-10 bg-background border-b border-border">
         <div className="flex flex-wrap items-center gap-2 px-4 md:px-6 py-3">
-          <DateRangeFilter start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e) }} />
+          <DateRangeFilter start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e) }} defaultRange={[today(), today()]} />
           <div className="ml-auto flex items-center gap-2">
             {isMultiDay && (
               <div className="flex rounded border border-border overflow-hidden">
