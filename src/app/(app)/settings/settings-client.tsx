@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -15,9 +16,10 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Loader2, Plus, Building2, RotateCcw, ShieldCheck } from "lucide-react"
+import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
+import { ReceiptPreview, type ReceiptConfig, type ReceiptSaleData } from "@/components/receipt/receipt-preview"
 
 interface PlanOption {
   id: string
@@ -67,6 +69,13 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [pricingMode, setPricingMode] = useState(shop?.pricing_mode ?? "uniform")
   const [primaryColour, setPrimaryColour] = useState(shop?.primary_colour || "#1b1a19")
 
+  // Receipt settings
+  const [receiptFormat, setReceiptFormat] = useState<"a4" | "thermal_58" | "thermal_80">(shop?.receipt_format ?? "a4")
+  const [receiptHeader, setReceiptHeader] = useState(shop?.receipt_header ?? "Thank you for your purchase!")
+  const [receiptFooter, setReceiptFooter] = useState(shop?.receipt_footer ?? "")
+  const [receiptShowLogo, setReceiptShowLogo] = useState(shop?.receipt_show_logo ?? true)
+  const [savingReceipt, setSavingReceipt] = useState(false)
+
   const plan = subscription?.plan
   const canEditSettings = isOwner(session)
 
@@ -103,6 +112,23 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
     } else {
       toast.success("Brand colour removed")
       window.location.reload()
+    }
+  }
+
+  async function saveReceiptSettings() {
+    setSavingReceipt(true)
+    const supabase = createClient()
+    const { error } = await supabase.from("shops").update({
+      receipt_format: receiptFormat,
+      receipt_header: receiptHeader,
+      receipt_footer: receiptFooter,
+      receipt_show_logo: receiptShowLogo,
+    }).eq("id", session.shop_id!)
+    setSavingReceipt(false)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Receipt settings saved")
     }
   }
 
@@ -211,6 +237,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branches">Branches</TabsTrigger>
+          <TabsTrigger value="receipt">Receipt</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
@@ -341,6 +368,112 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Receipt */}
+        <TabsContent value="receipt" className="mt-4">
+          {(() => {
+            // Mock sale for live preview
+            const mockSale: ReceiptSaleData = {
+              id: "preview-0000000001",
+              saleDate: new Date().toISOString().split("T")[0],
+              createdAt: new Date().toISOString(),
+              paymentMethod: "cash",
+              totalAmount: 125.50,
+              recordedByName: "Jane Doe",
+              notes: null,
+              branchId: "",
+              items: [
+                { productName: "Frozen Chicken Wings", unitType: "kg", quantity: 2.5, unitPrice: 28, discountAmount: 0, lineTotal: 70 },
+                { productName: "Cooking Oil (5L)", unitType: "units", quantity: 2, unitPrice: 22, discountAmount: 0, lineTotal: 44 },
+                { productName: "Rice (25kg bag)", unitType: "units", quantity: 1, unitPrice: 11.50, discountAmount: 0, lineTotal: 11.50 },
+              ],
+            }
+            const previewCfg: ReceiptConfig = {
+              title: "Receipt",
+              format: receiptFormat,
+              header: receiptHeader,
+              footer: receiptFooter,
+              showLogo: receiptShowLogo,
+              shopName: shopName,
+              shopLogoUrl: shop?.logo_url ?? null,
+              branchName: null,
+              branchAddress: null,
+              currency,
+            }
+            const previewWidth = receiptFormat === "thermal_58" ? "max-w-[62mm]" : receiptFormat === "thermal_80" ? "max-w-[84mm]" : "max-w-[420px]"
+
+            return (
+              <div className="flex flex-col lg:flex-row gap-0 border rounded-lg overflow-hidden min-h-[520px]">
+                {/* ── Edit panel ── */}
+                <div className="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r p-5 space-y-5 overflow-y-auto">
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-1.5 mb-0.5">
+                      <Receipt className="h-3.5 w-3.5" /> Receipt Defaults
+                    </p>
+                    <p className="text-xs text-muted-foreground">Pre-filled whenever you print. Override per receipt anytime.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Format</Label>
+                    <Select value={receiptFormat} onValueChange={(v) => setReceiptFormat(v as typeof receiptFormat)}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="a4">A4 / Letter</SelectItem>
+                        <SelectItem value="thermal_80">Thermal 80mm</SelectItem>
+                        <SelectItem value="thermal_58">Thermal 58mm</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      {receiptFormat === "a4" ? "Standard — desktop / inkjet printers"
+                        : receiptFormat === "thermal_80" ? "80mm roll — most POS printers"
+                        : "58mm roll — compact POS printers"}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Header Message</Label>
+                    <Textarea
+                      rows={2}
+                      value={receiptHeader}
+                      onChange={(e) => setReceiptHeader(e.target.value)}
+                      className="text-sm resize-none"
+                      placeholder="e.g. Thank you for shopping with us!"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Footer Message</Label>
+                    <Textarea
+                      rows={2}
+                      value={receiptFooter}
+                      onChange={(e) => setReceiptFooter(e.target.value)}
+                      className="text-sm resize-none"
+                      placeholder="e.g. Returns accepted within 7 days"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Show Logo</Label>
+                    <Switch checked={receiptShowLogo} onCheckedChange={setReceiptShowLogo} />
+                  </div>
+
+                  <Button onClick={saveReceiptSettings} disabled={savingReceipt} size="sm" className="w-full">
+                    {savingReceipt && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                    Save Defaults
+                  </Button>
+                </div>
+
+                {/* ── Live preview ── */}
+                <div className="flex-1 overflow-y-auto bg-muted/30 p-6">
+                  <p className="text-xs text-center text-muted-foreground mb-4">Live preview — updates as you type</p>
+                  <div className={`${previewWidth} mx-auto shadow-sm rounded overflow-hidden border`}>
+                    <ReceiptPreview sale={mockSale} cfg={previewCfg} />
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </TabsContent>
 
         {/* Billing */}

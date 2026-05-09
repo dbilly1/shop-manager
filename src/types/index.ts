@@ -74,6 +74,10 @@ export interface Shop {
   pricing_mode: PricingMode
   recon_tolerance: number
   credit_overdue_days: number
+  receipt_format: "a4" | "thermal_58" | "thermal_80"
+  receipt_header: string
+  receipt_footer: string
+  receipt_show_logo: boolean
   created_at: string
 }
 

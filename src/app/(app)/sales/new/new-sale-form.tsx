@@ -11,11 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatCurrency } from "@/utils/format"
-import { Plus, Trash2, Loader2, ShoppingCart } from "lucide-react"
+import { Plus, Trash2, Loader2, ShoppingCart, ScanLine } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
 import { canBackdateSales } from "@/lib/permissions"
 import { logAuditAction } from "@/lib/audit-action"
+import { ReceiptModal } from "@/components/receipt/receipt-modal"
+import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
+import type { ReceiptSaleData } from "@/components/receipt/receipt-preview"
 
 interface BranchProduct {
   id: string
@@ -24,7 +27,7 @@ interface BranchProduct {
   current_stock_kg: number
   current_stock_units: number
   current_stock_boxes: number
-  product: { id: string; name: string; unit_type: string; base_price: number; cost_price: number } | null
+  product: { id: string; name: string; unit_type: string; units_per_box: number | null; base_price: number; cost_price: number } | null
 }
 
 interface SaleLineItem {
@@ -56,6 +59,8 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
   const [selectedBranchId, setSelectedBranchId] = useState(session.branch_id ?? "")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [completedSale, setCompletedSale] = useState<ReceiptSaleData | null>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const showBackdate = session.role ? canBackdateSales(session.role) : false
 
@@ -76,6 +81,35 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
         cost_price: bp.product!.cost_price,
       },
     ])
+  }
+
+  async function handleScan(code: string) {
+    const supabase = createClient()
+    const { data: product } = await supabase
+      .from("products")
+      .select("id")
+      .eq("shop_id", session.shop_id!)
+      .eq("sku", code)
+      .single()
+    if (!product) { toast.error(`No product found for barcode: ${code}`); return }
+    const bp = branchProducts.find((b) => b.product?.id === product.id)
+    if (!bp?.product) { toast.error("Product not available in this branch"); return }
+    const existing = lines.findIndex((l) => l.branch_product_id === bp.id)
+    if (existing >= 0) {
+      setLines((prev) => prev.map((l, i) => i === existing ? { ...l, quantity: l.quantity + 1 } : l))
+    } else {
+      setLines((prev) => [...prev, {
+        branch_product_id: bp.id,
+        product_id: bp.product!.id,
+        product_name: bp.product!.name,
+        unit_type: bp.product!.unit_type,
+        unit_price: bp.override_price ?? bp.product!.base_price,
+        quantity: 1,
+        discount: 0,
+        cost_price: bp.product!.cost_price,
+      }])
+    }
+    toast.success(`Added: ${bp.product.name}`)
   }
 
   function updateLine(idx: number, field: keyof SaleLineItem, value: string | number) {
@@ -169,8 +203,27 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
     })
 
     toast.success("Sale recorded successfully")
-    router.push("/sales")
-    router.refresh()
+
+    // Show receipt modal — navigate to /sales when it closes
+    setCompletedSale({
+      id: String(saleId ?? ""),
+      saleDate,
+      createdAt: new Date().toISOString(),
+      paymentMethod,
+      totalAmount: total,
+      recordedByName: session.full_name ?? null,
+      notes: null,
+      branchId,
+      items: lines.map((l) => ({
+        productName: l.product_name,
+        unitType: l.unit_type,
+        quantity: l.quantity,
+        unitPrice: l.unit_price,
+        discountAmount: l.discount,
+        lineTotal: l.unit_price * l.quantity - l.discount,
+      })),
+    })
+    setLoading(false)
   }
 
   return (
@@ -265,10 +318,16 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
             </div>
           ))}
 
-          <Button variant="outline" size="sm" onClick={addLine} className="mt-2">
-            <Plus className="mr-2 h-4 w-4" />
-            Add item
-          </Button>
+          <div className="flex items-center gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={addLine}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add item
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setScannerOpen(true)}>
+              <ScanLine className="mr-2 h-4 w-4" />
+              Scan barcode
+            </Button>
+          </div>
 
           {lines.length > 0 && (
             <>
@@ -357,6 +416,29 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
         )}
         Record Sale · {formatCurrency(total, currency)}
       </Button>
+
+      {/* Receipt modal — shown after successful submission */}
+      {completedSale && (
+        <ReceiptModal
+          open={!!completedSale}
+          onClose={() => {
+            setCompletedSale(null)
+            router.push("/sales")
+            router.refresh()
+          }}
+          sale={completedSale}
+          session={session}
+          currency={currency}
+        />
+      )}
+
+      {/* Barcode scanner */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onScan={handleScan}
+        onClose={() => setScannerOpen(false)}
+        title="Scan Product Barcode"
+      />
     </div>
   )
 }

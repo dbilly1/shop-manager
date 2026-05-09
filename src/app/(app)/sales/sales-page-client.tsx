@@ -13,13 +13,16 @@ import { formatCurrency } from "@/utils/format"
 import {
   ShoppingCart, Layers, Plus, X, CalendarDays, Loader2,
   TrendingUp, TrendingDown, Minus, ChevronRight, ArrowLeft,
-  Pencil, Trash2,
+  Pencil, Trash2, Receipt, ScanLine,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
 import { canBackdateSales } from "@/lib/permissions"
 import { logAuditAction } from "@/lib/audit-action"
 import { BulkEntryDialog } from "./bulk/bulk-sale-form"
+import { ReceiptModal } from "@/components/receipt/receipt-modal"
+import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
+import type { ReceiptSaleData } from "@/components/receipt/receipt-preview"
 
 interface BranchProduct {
   id: string
@@ -130,34 +133,62 @@ function getQtyDisplay(item: SaleItem) {
   return parts.length > 0 ? parts.join(" + ") : "—"
 }
 
+function saleToReceiptData(sale: IndividualSale): ReceiptSaleData {
+  return {
+    id: sale.id,
+    saleDate: sale.sale_date,
+    createdAt: sale.created_at,
+    paymentMethod: sale.payment_method,
+    totalAmount: sale.total_amount,
+    recordedByName: sale.recorded_by_name,
+    notes: sale.notes,
+    branchId: sale.sale_items[0]?.branch_id ?? "",
+    items: sale.sale_items.map((item) => {
+      const ut  = item.product?.unit_type ?? "units"
+      const qty = ut === "kg" ? item.quantity_kg : item.quantity_units
+      return {
+        productName: item.product?.name ?? "Unknown",
+        unitType: ut,
+        quantity: qty,
+        unitPrice: item.unit_price,
+        discountAmount: 0,
+        lineTotal: item.line_total,
+      }
+    }),
+  }
+}
+
 function SaleCard({
-  sale, currency, deletingId, onDelete,
+  sale, currency, deletingId, onDelete, onReceipt,
 }: {
   sale: IndividualSale
   currency: string
   deletingId: string | null
   onDelete: () => void
+  onReceipt: () => void
 }) {
   function formatTime(iso: string) {
     return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
   }
   return (
-    <div className="border rounded-lg p-3 space-y-2 bg-background">
+    <div
+      className="border rounded-lg p-3 space-y-2 bg-background cursor-pointer hover:bg-muted/20 transition-colors"
+      onClick={onReceipt}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-sm">{formatCurrency(sale.total_amount, currency)}</span>
           {paymentBadge(sale.payment_method)}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-            <Pencil className="h-3 w-3" />
-          </button>
+        {/* Stop propagation so edit/delete don't also open the receipt */}
+        <div className="flex items-center gap-2.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onDelete}
             disabled={deletingId === sale.id}
-            className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            className="h-8 w-8 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            title="Delete sale"
           >
-            {deletingId === sale.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+            {deletingId === sale.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
         </div>
       </div>
@@ -430,6 +461,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<IndividualSale | null>(null)
   const [editingSale, setEditingSale] = useState<IndividualSale | null>(null)
+  const [receiptSale, setReceiptSale] = useState<ReceiptSaleData | null>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const fetchSalesForDate = useCallback(async (date: string): Promise<IndividualSale[]> => {
     const supabase = createClient()
@@ -554,6 +587,41 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setLoading(false)
     if (isSalesperson) loadTodaySales()
     router.refresh()
+  }
+
+  async function handleScan(code: string) {
+    const supabase = createClient()
+    // Find product by SKU
+    const { data: product } = await supabase
+      .from("products")
+      .select("id")
+      .eq("shop_id", session.shop_id!)
+      .eq("sku", code)
+      .single()
+    if (!product) { toast.error(`No product found for barcode: ${code}`); return }
+    // Find the branch_product
+    const bp = branchProducts.find((b) => b.product?.id === product.id)
+    if (!bp) { toast.error("Product not available in this branch"); return }
+    setSelectedBpId(bp.id)
+    // Auto-add to cart
+    const existing = lines.findIndex((l) => l.branch_product_id === bp.id)
+    if (existing >= 0) {
+      setLines((prev) => prev.map((l, i) => i === existing ? { ...l, quantity: l.quantity + 1 } : l))
+    } else {
+      setLines((prev) => [...prev, {
+        branch_product_id: bp.id,
+        product_id: bp.product!.id,
+        product_name: bp.product!.name,
+        unit_type: bp.product!.unit_type,
+        units_per_box: bp.product!.units_per_box ?? null,
+        unit_price: bp.override_price ?? bp.product!.base_price,
+        quantity: 1,
+        boxes: 0,
+        discount: 0,
+        cost_price: bp.product!.cost_price,
+      }])
+    }
+    toast.success(`Added: ${bp.product!.name}`)
   }
 
   async function addCustomer() {
@@ -796,6 +864,13 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
               </SelectContent>
             </Select>
             <button
+              onClick={() => setScannerOpen(true)}
+              title="Scan barcode"
+              className="h-9 w-9 shrink-0 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <ScanLine className="h-4 w-4" />
+            </button>
+            <button
               onClick={addSelectedProduct}
               disabled={!selectedBpId}
               className="h-9 w-9 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-40"
@@ -1006,7 +1081,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 <p className="text-center text-muted-foreground text-sm pt-12">No sales recorded today</p>
               ) : (
                 todaySales.map((sale) => (
-                  <SaleCard key={sale.id} sale={sale} currency={currency} deletingId={deletingId} onDelete={() => deleteSale(sale)} />
+                  <SaleCard key={sale.id} sale={sale} currency={currency} deletingId={deletingId} onDelete={() => deleteSale(sale)} onReceipt={() => setReceiptSale(saleToReceiptData(sale))} />
                 ))
               )}
             </div>
@@ -1091,7 +1166,11 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                           const time = new Date(sale.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                           const recorderName = sale.recorded_by_name ?? sale.recorded_by.slice(0, 8)
                           return (
-                            <tr key={sale.id} className="border-b transition-colors hover:bg-muted/20">
+                            <tr
+                              key={sale.id}
+                              className="border-b transition-colors hover:bg-muted/20 cursor-pointer"
+                              onClick={() => setReceiptSale(saleToReceiptData(sale))}
+                            >
                               {/* Time */}
                               <td className="px-4 py-2.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap align-top pt-3">
                                 {time}
@@ -1133,21 +1212,23 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                               <td className="px-3 py-2.5 align-top pt-2.5">{paymentBadge(sale.payment_method)}</td>
                               {/* Recorded by */}
                               <td className="px-3 py-2.5 text-xs text-muted-foreground truncate align-top pt-3">{recorderName}</td>
-                              {/* Actions */}
-                              <td className="px-3 py-2.5 align-top pt-2">
-                                <div className="flex items-center gap-1">
+                              {/* Actions — stop propagation so row click (receipt) doesn't fire */}
+                              <td className="px-3 py-2.5 align-top pt-2" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-2">
                                   <button
                                     onClick={() => setEditingSale(sale)}
-                                    className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                    className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                    title="Edit sale"
                                   >
-                                    <Pencil className="h-3 w-3" />
+                                    <Pencil className="h-3.5 w-3.5" />
                                   </button>
                                   <button
                                     onClick={() => setDeleteTarget(sale)}
                                     disabled={deletingId === sale.id}
-                                    className="h-6 w-6 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                    className="h-7 w-7 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                    title="Delete sale"
                                   >
-                                    {deletingId === sale.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                    {deletingId === sale.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                                   </button>
                                 </div>
                               </td>
@@ -1307,6 +1388,26 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Receipt modal (preview-only — edit defaults in Settings → Receipt) ── */}
+      {receiptSale && (
+        <ReceiptModal
+          open={!!receiptSale}
+          onClose={() => setReceiptSale(null)}
+          sale={receiptSale}
+          session={session}
+          currency={currency}
+          previewOnly
+        />
+      )}
+
+      {/* ── Barcode scanner ── */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onScan={handleScan}
+        onClose={() => setScannerOpen(false)}
+        title="Scan Product Barcode"
+      />
     </div>
   )
 }

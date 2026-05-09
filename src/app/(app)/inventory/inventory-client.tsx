@@ -38,11 +38,13 @@ import {
   AlertTriangle,
   CircleOff,
   DollarSign,
+  ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionContext } from "@/types";
 import { canManageInventory } from "@/lib/permissions";
 import { useBranch } from "@/hooks/useBranch";
+import { BarcodeScanner } from "@/components/scanner/barcode-scanner";
 
 const UNIT_TYPES = ["units", "kg"] as const;
 
@@ -238,6 +240,7 @@ export function InventoryClient({
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingBp, setEditingBp] = useState<BranchProduct | null>(null);
   const [pName, setPName] = useState("");
+  const [pSku, setPSku] = useState("");
   const [pCategory, setPCategory] = useState("");
   const [pUnitType, setPUnitType] = useState("units");
   const [pUnitsPerBox, setPUnitsPerBox] = useState("");
@@ -248,6 +251,10 @@ export function InventoryClient({
   const [pOpeningBoxes, setPOpeningBoxes] = useState("");
   const [pOpeningCost, setPOpeningCost] = useState("");
   const [pSaving, setPSaving] = useState(false);
+
+  // ─── Barcode scanner ──────────────────────────────────────────────
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanMode, setScanMode] = useState<"search" | "sku">("search");
 
   // ─── Single Restock dialog ───────────────────────────────────────
   const [restockBp, setRestockBp] = useState<BranchProduct | null>(null);
@@ -357,6 +364,23 @@ export function InventoryClient({
   }, [baseProducts, search, sortKey]);
 
   // ─── Product dialog helpers ──────────────────────────────────────
+  function handleScan(code: string) {
+    if (scanMode === "sku") {
+      setPSku(code)
+      toast.success("SKU filled from barcode")
+    } else {
+      // Search mode: look up by SKU in the current product list
+      const found = baseProducts.find((bp) => bp.product?.sku === code)
+      if (found) {
+        setSearch(found.product!.name)
+        toast.success(`Found: ${found.product!.name}`)
+      } else {
+        setSearch(code)
+        toast.info(`Barcode scanned: ${code}`)
+      }
+    }
+  }
+
   function openAddProduct() {
     // Shop-level users must pick a branch first — "All Branches" would
     // duplicate the product across every branch simultaneously.
@@ -366,6 +390,7 @@ export function InventoryClient({
     }
     setEditingBp(null);
     setPName("");
+    setPSku("");
     setPCategory("");
     setPUnitType("units");
     setPUnitsPerBox("");
@@ -383,6 +408,7 @@ export function InventoryClient({
     setEditingBp(bp);
     setConfirmAction(null);
     setPName(bp.product.name);
+    setPSku(bp.product.sku ?? "");
     setPCategory(bp.product.category ?? "");
     setPUnitType(bp.product.unit_type);
     setPUnitsPerBox(
@@ -410,6 +436,7 @@ export function InventoryClient({
         .from("products")
         .update({
           name: pName.trim(),
+          sku: pSku.trim() || null,
           category: pCategory || null,
           unit_type: pUnitType,
           units_per_box: pUnitsPerBox ? parseFloat(pUnitsPerBox) : null,
@@ -440,6 +467,7 @@ export function InventoryClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: pName.trim(),
+          sku: pSku.trim() || null,
           category: pCategory || null,
           unit_type: pUnitType,
           units_per_box: pUnitsPerBox || null,
@@ -747,6 +775,13 @@ export function InventoryClient({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <button
+          onClick={() => { setScanMode("search"); setScannerOpen(true) }}
+          title="Scan barcode to find product"
+          className="h-10 w-10 shrink-0 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <ScanLine className="h-4 w-4" />
+        </button>
 
         {/* Sort */}
         <Select
@@ -1124,6 +1159,28 @@ export function InventoryClient({
                 onChange={(e) => setPName(e.target.value)}
                 placeholder="e.g. Frozen Chicken Wings"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                SKU / Barcode{" "}
+                <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  value={pSku}
+                  onChange={(e) => setPSku(e.target.value)}
+                  placeholder="e.g. 5901234123457"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setScanMode("sku"); setScannerOpen(true) }}
+                  title="Scan barcode to fill SKU"
+                  className="h-9 w-9 shrink-0 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <ScanLine className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -1541,6 +1598,14 @@ export function InventoryClient({
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* ── Barcode Scanner ── */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onScan={handleScan}
+        onClose={() => setScannerOpen(false)}
+        title={scanMode === "sku" ? "Scan to Fill SKU" : "Scan to Find Product"}
+      />
 
       {/* ── Bulk Restock Dialog ── */}
       <Dialog open={bulkRestockOpen} onOpenChange={(v) => { setBulkRestockOpen(v); if (!v) setBulkRows([emptyBulkRow()]); }}>
