@@ -35,6 +35,10 @@ export interface ReceiptConfig {
   branchName: string | null
   branchAddress: string | null
   currency: string
+  taxEnabled: boolean
+  taxLabel: string
+  taxRate: number        // e.g. 15 = 15% added on top of sale total
+  receiptPrefix: string  // e.g. "INV-" → "INV-AB1234C5DE"
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -65,6 +69,10 @@ function fmtQty(qty: number, unitType: string) {
 function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig }) {
   const fc = (n: number) => formatCurrency(n, cfg.currency)
   const discount = sale.items.reduce((s, i) => s + i.discountAmount, 0)
+  const taxAmount = cfg.taxEnabled && cfg.taxRate > 0
+    ? sale.totalAmount * cfg.taxRate / 100
+    : 0
+  const grandTotal = sale.totalAmount + taxAmount
 
   return (
     <div className="bg-white text-black font-sans w-full max-w-[210mm] mx-auto">
@@ -88,7 +96,7 @@ function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig })
             <p className="text-xs text-gray-400 mt-0.5">{fmtDate(sale.saleDate, sale.createdAt)}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs font-mono text-gray-500">#{sale.id.slice(-10).toUpperCase()}</p>
+            <p className="text-xs font-mono text-gray-500">#{cfg.receiptPrefix}{sale.id.slice(-10).toUpperCase()}</p>
             <p className="text-xs text-gray-400 mt-0.5">{fmtPayment(sale.paymentMethod)}</p>
           </div>
         </div>
@@ -128,9 +136,21 @@ function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig })
               <span>- {fc(discount)}</span>
             </div>
           )}
+          {taxAmount > 0 && (
+            <div className="flex justify-between text-sm text-gray-500">
+              <span>Subtotal</span>
+              <span>{fc(sale.totalAmount)}</span>
+            </div>
+          )}
+          {taxAmount > 0 && (
+            <div className="flex justify-between text-sm text-gray-500">
+              <span>{cfg.taxLabel} ({cfg.taxRate}%)</span>
+              <span>{fc(taxAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-base font-bold">
             <span>TOTAL</span>
-            <span>{fc(sale.totalAmount)}</span>
+            <span>{fc(grandTotal)}</span>
           </div>
           <div className="flex justify-between text-xs text-gray-400">
             <span>Payment</span>
@@ -157,6 +177,10 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
   const w = isNarrow ? "max-w-[54mm]" : "max-w-[76mm]"
   const dash = "─".repeat(isNarrow ? 28 : 36)
   const discount = sale.items.reduce((s, i) => s + i.discountAmount, 0)
+  const taxAmount = cfg.taxEnabled && cfg.taxRate > 0
+    ? sale.totalAmount * cfg.taxRate / 100
+    : 0
+  const grandTotal = sale.totalAmount + taxAmount
 
   return (
     <div className={`bg-white text-black font-mono text-[11px] leading-snug mx-auto ${w} px-2 py-4`}>
@@ -178,7 +202,7 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
       <div className="text-center my-2">
         <p className="font-bold">{cfg.title}</p>
         <p className="text-[10px] text-gray-600">{fmtDate(sale.saleDate, sale.createdAt)}</p>
-        <p className="text-[10px] text-gray-500 font-mono">#{sale.id.slice(-10).toUpperCase()}</p>
+        <p className="text-[10px] text-gray-500 font-mono">#{cfg.receiptPrefix}{sale.id.slice(-10).toUpperCase()}</p>
         {sale.recordedByName && <p className="text-[10px] text-gray-500">By: {sale.recordedByName}</p>}
       </div>
 
@@ -212,9 +236,21 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
             <span>- {fc(discount)}</span>
           </div>
         )}
+        {taxAmount > 0 && (
+          <div className="flex justify-between text-[10px] text-gray-600">
+            <span>Subtotal</span>
+            <span>{fc(sale.totalAmount)}</span>
+          </div>
+        )}
+        {taxAmount > 0 && (
+          <div className="flex justify-between text-[10px] text-gray-600">
+            <span>{cfg.taxLabel} ({cfg.taxRate}%)</span>
+            <span>{fc(taxAmount)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold">
           <span>TOTAL</span>
-          <span>{fc(sale.totalAmount)}</span>
+          <span>{fc(grandTotal)}</span>
         </div>
         <div className="flex justify-between text-[10px] text-gray-600">
           <span>Payment</span>

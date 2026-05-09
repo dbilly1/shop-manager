@@ -78,6 +78,10 @@ export interface Shop {
   receipt_header: string
   receipt_footer: string
   receipt_show_logo: boolean
+  receipt_tax_enabled: boolean
+  receipt_tax_label: string
+  receipt_tax_rate: number
+  receipt_number_prefix: string
   created_at: string
 }
 

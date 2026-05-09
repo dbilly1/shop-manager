@@ -70,11 +70,15 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [primaryColour, setPrimaryColour] = useState(shop?.primary_colour || "#1b1a19")
 
   // Receipt settings
-  const [receiptFormat, setReceiptFormat] = useState<"a4" | "thermal_58" | "thermal_80">(shop?.receipt_format ?? "a4")
-  const [receiptHeader, setReceiptHeader] = useState(shop?.receipt_header ?? "Thank you for your purchase!")
-  const [receiptFooter, setReceiptFooter] = useState(shop?.receipt_footer ?? "")
-  const [receiptShowLogo, setReceiptShowLogo] = useState(shop?.receipt_show_logo ?? true)
-  const [savingReceipt, setSavingReceipt] = useState(false)
+  const [receiptFormat,    setReceiptFormat]    = useState<"a4" | "thermal_58" | "thermal_80">(shop?.receipt_format ?? "a4")
+  const [receiptHeader,    setReceiptHeader]    = useState(shop?.receipt_header ?? "Thank you for your purchase!")
+  const [receiptFooter,    setReceiptFooter]    = useState(shop?.receipt_footer ?? "")
+  const [receiptShowLogo,  setReceiptShowLogo]  = useState(shop?.receipt_show_logo ?? true)
+  const [receiptTaxEnabled,setReceiptTaxEnabled]= useState(shop?.receipt_tax_enabled ?? false)
+  const [receiptTaxLabel,  setReceiptTaxLabel]  = useState(shop?.receipt_tax_label ?? "Tax")
+  const [receiptTaxRate,   setReceiptTaxRate]   = useState(shop?.receipt_tax_rate ?? 0)
+  const [receiptPrefix,    setReceiptPrefix]    = useState(shop?.receipt_number_prefix ?? "")
+  const [savingReceipt,    setSavingReceipt]    = useState(false)
 
   const plan = subscription?.plan
   const canEditSettings = isOwner(session)
@@ -119,10 +123,14 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
     setSavingReceipt(true)
     const supabase = createClient()
     const { error } = await supabase.from("shops").update({
-      receipt_format: receiptFormat,
-      receipt_header: receiptHeader,
-      receipt_footer: receiptFooter,
-      receipt_show_logo: receiptShowLogo,
+      receipt_format:        receiptFormat,
+      receipt_header:        receiptHeader,
+      receipt_footer:        receiptFooter,
+      receipt_show_logo:     receiptShowLogo,
+      receipt_tax_enabled:   receiptTaxEnabled,
+      receipt_tax_label:     receiptTaxLabel,
+      receipt_tax_rate:      receiptTaxRate,
+      receipt_number_prefix: receiptPrefix,
     }).eq("id", session.shop_id!)
     setSavingReceipt(false)
     if (error) {
@@ -397,9 +405,13 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               showLogo: receiptShowLogo,
               shopName: shopName,
               shopLogoUrl: shop?.logo_url ?? null,
-              branchName: null,
+              branchName: "Main Branch",        // placeholder so preview matches real receipts
               branchAddress: null,
               currency,
+              taxEnabled: receiptTaxEnabled,
+              taxLabel: receiptTaxLabel,
+              taxRate: receiptTaxRate,
+              receiptPrefix: receiptPrefix,
             }
             const previewWidth = receiptFormat === "thermal_58" ? "max-w-[62mm]" : receiptFormat === "thermal_80" ? "max-w-[84mm]" : "max-w-[420px]"
 
@@ -456,6 +468,51 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Show Logo</Label>
                     <Switch checked={receiptShowLogo} onCheckedChange={setReceiptShowLogo} />
+                  </div>
+
+                  {/* Tax */}
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Charge Tax</Label>
+                      <Switch checked={receiptTaxEnabled} onCheckedChange={setReceiptTaxEnabled} />
+                    </div>
+                    {receiptTaxEnabled && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Label</Label>
+                          <Input
+                            value={receiptTaxLabel}
+                            onChange={(e) => setReceiptTaxLabel(e.target.value)}
+                            placeholder="VAT"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Rate (%)</Label>
+                          <Input
+                            type="number" min={0} max={100} step="0.01"
+                            value={receiptTaxRate || ""}
+                            onChange={(e) => setReceiptTaxRate(parseFloat(e.target.value) || 0)}
+                            placeholder="15"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Receipt number prefix */}
+                  <div className="space-y-1.5 border-t pt-3">
+                    <Label className="text-xs">Receipt No. Prefix</Label>
+                    <Input
+                      value={receiptPrefix}
+                      onChange={(e) => setReceiptPrefix(e.target.value)}
+                      placeholder="e.g. INV- or REC-"
+                      className="h-8 text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Preview: #{receiptPrefix || ""}AB1234C5DE
+                    </p>
                   </div>
 
                   <Button onClick={saveReceiptSettings} disabled={savingReceipt} size="sm" className="w-full">

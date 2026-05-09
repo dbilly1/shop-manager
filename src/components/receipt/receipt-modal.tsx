@@ -66,18 +66,22 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
   const previewRef = useRef<HTMLDivElement>(null)
 
   // Config state — editable by user
-  const [title,     setTitle]     = useState("Receipt")
-  const [format,    setFormat]    = useState<"a4" | "thermal_58" | "thermal_80">("a4")
-  const [header,    setHeader]    = useState("Thank you for your purchase!")
-  const [footer,    setFooter]    = useState("")
-  const [showLogo,  setShowLogo]  = useState(true)
+  const [title,         setTitle]         = useState("Receipt")
+  const [format,        setFormat]        = useState<"a4" | "thermal_58" | "thermal_80">("a4")
+  const [header,        setHeader]        = useState("Thank you for your purchase!")
+  const [footer,        setFooter]        = useState("")
+  const [showLogo,      setShowLogo]      = useState(true)
+  const [taxEnabled,    setTaxEnabled]    = useState(false)
+  const [taxLabel,      setTaxLabel]      = useState("Tax")
+  const [taxRate,       setTaxRate]       = useState(0)
+  const [receiptPrefix, setReceiptPrefix] = useState("")
 
   // Fetched shop / branch data
-  const [shopName,     setShopName]     = useState("")
-  const [shopLogoUrl,  setShopLogoUrl]  = useState<string | null>(null)
-  const [branchName,   setBranchName]   = useState<string | null>(null)
-  const [branchAddress,setBranchAddress]= useState<string | null>(null)
-  const [fetching,     setFetching]     = useState(false)
+  const [shopName,      setShopName]      = useState("")
+  const [shopLogoUrl,   setShopLogoUrl]   = useState<string | null>(null)
+  const [branchName,    setBranchName]    = useState<string | null>(null)
+  const [branchAddress, setBranchAddress] = useState<string | null>(null)
+  const [fetching,      setFetching]      = useState(false)
 
   // Fetch shop + branch data once when modal opens
   useEffect(() => {
@@ -89,7 +93,7 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("name, logo_url, receipt_format, receipt_header, receipt_footer, receipt_show_logo")
+        .select("name, logo_url, receipt_format, receipt_header, receipt_footer, receipt_show_logo, receipt_tax_enabled, receipt_tax_label, receipt_tax_rate, receipt_number_prefix")
         .eq("id", session.shop_id!)
         .single()
 
@@ -100,6 +104,10 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
         setHeader(shop.receipt_header ?? "Thank you for your purchase!")
         setFooter(shop.receipt_footer ?? "")
         setShowLogo(shop.receipt_show_logo ?? true)
+        setTaxEnabled(shop.receipt_tax_enabled ?? false)
+        setTaxLabel(shop.receipt_tax_label ?? "Tax")
+        setTaxRate(shop.receipt_tax_rate ?? 0)
+        setReceiptPrefix(shop.receipt_number_prefix ?? "")
       }
 
       if (sale.branchId) {
@@ -124,19 +132,25 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
   const saveDefaults = useCallback(async () => {
     const supabase = createClient()
     await supabase.from("shops").update({
-      receipt_format: format,
-      receipt_header: header,
-      receipt_footer: footer,
-      receipt_show_logo: showLogo,
+      receipt_format:       format,
+      receipt_header:       header,
+      receipt_footer:       footer,
+      receipt_show_logo:    showLogo,
+      receipt_tax_enabled:  taxEnabled,
+      receipt_tax_label:    taxLabel,
+      receipt_tax_rate:     taxRate,
+      receipt_number_prefix: receiptPrefix,
     }).eq("id", session.shop_id!)
     toast.success("Receipt defaults saved")
-  }, [format, header, footer, showLogo, session.shop_id])
+  }, [format, header, footer, showLogo, taxEnabled, taxLabel, taxRate, receiptPrefix, session.shop_id])
 
   const cfg: ReceiptConfig = {
     title, format, header, footer, showLogo,
     shopName, shopLogoUrl,
     branchName, branchAddress,
     currency,
+    taxEnabled, taxLabel, taxRate,
+    receiptPrefix,
   }
 
   const previewWidth = format === "thermal_58" ? "max-w-[62mm]" : format === "thermal_80" ? "max-w-[84mm]" : "max-w-[420px]"
@@ -206,6 +220,51 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Show Logo</Label>
                 <Switch checked={showLogo} onCheckedChange={setShowLogo} />
+              </div>
+
+              {/* Tax */}
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Charge Tax</Label>
+                  <Switch checked={taxEnabled} onCheckedChange={setTaxEnabled} />
+                </div>
+                {taxEnabled && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Label</Label>
+                      <Input
+                        value={taxLabel}
+                        onChange={(e) => setTaxLabel(e.target.value)}
+                        placeholder="VAT"
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Rate (%)</Label>
+                      <Input
+                        type="number" min={0} max={100} step="0.01"
+                        value={taxRate || ""}
+                        onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                        placeholder="15"
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Receipt number prefix */}
+              <div className="space-y-1.5 border-t pt-3">
+                <Label className="text-xs">Receipt No. Prefix</Label>
+                <Input
+                  value={receiptPrefix}
+                  onChange={(e) => setReceiptPrefix(e.target.value)}
+                  placeholder="e.g. INV- or REC-"
+                  className="h-8 text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Preview: #{receiptPrefix || ""}AB1234C5DE
+                </p>
               </div>
 
               <button
