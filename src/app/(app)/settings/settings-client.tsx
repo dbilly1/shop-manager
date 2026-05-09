@@ -231,10 +231,10 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   }
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4">
 
       <Tabs defaultValue="general">
-        <TabsList>
+        <TabsList className="max-w-2xl">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branches">Branches</TabsTrigger>
           <TabsTrigger value="receipt">Receipt</TabsTrigger>
@@ -243,7 +243,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsList>
 
         {/* General */}
-        <TabsContent value="general" className="space-y-4 mt-4">
+        <TabsContent value="general" className="space-y-4 mt-4 max-w-2xl">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Shop Details</CardTitle>
@@ -333,7 +333,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Branches */}
-        <TabsContent value="branches" className="space-y-4 mt-4">
+        <TabsContent value="branches" className="space-y-4 mt-4 max-w-2xl">
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">{branches.filter((b) => b.status === "active").length} active branch(es)</p>
             {canEditSettings && (
@@ -477,7 +477,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Billing */}
-        <TabsContent value="billing" className="space-y-4 mt-4">
+        <TabsContent value="billing" className="space-y-4 mt-4 max-w-2xl">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Current Plan</CardTitle>
@@ -511,7 +511,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
           </Card>
         </TabsContent>
         {/* Security */}
-        <TabsContent value="security" className="space-y-4 mt-4">
+        <TabsContent value="security" className="space-y-4 mt-4 max-w-2xl">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
