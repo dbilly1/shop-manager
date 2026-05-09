@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt } from "lucide-react"
+import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt, Percent, X } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
 import { ReceiptPreview, type ReceiptConfig, type ReceiptSaleData } from "@/components/receipt/receipt-preview"
@@ -70,15 +70,19 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [primaryColour, setPrimaryColour] = useState(shop?.primary_colour || "#1b1a19")
 
   // Receipt settings
-  const [receiptFormat,    setReceiptFormat]    = useState<"a4" | "thermal_58" | "thermal_80">(shop?.receipt_format ?? "a4")
-  const [receiptHeader,    setReceiptHeader]    = useState(shop?.receipt_header ?? "Thank you for your purchase!")
-  const [receiptFooter,    setReceiptFooter]    = useState(shop?.receipt_footer ?? "")
-  const [receiptShowLogo,  setReceiptShowLogo]  = useState(shop?.receipt_show_logo ?? true)
-  const [receiptTaxes,     setReceiptTaxes]     = useState<{ label: string; rate: number }[]>(
-    Array.isArray(shop?.receipt_taxes) ? shop.receipt_taxes : []
+  const [receiptFormat,      setReceiptFormat]      = useState<"a4" | "thermal_58" | "thermal_80">(shop?.receipt_format ?? "a4")
+  const [receiptHeader,      setReceiptHeader]      = useState(shop?.receipt_header ?? "Thank you for your purchase!")
+  const [receiptFooter,      setReceiptFooter]      = useState(shop?.receipt_footer ?? "")
+  const [receiptShowLogo,    setReceiptShowLogo]    = useState(shop?.receipt_show_logo ?? true)
+  const [receiptShowBranch,  setReceiptShowBranch]  = useState(shop?.receipt_show_branch ?? false)
+  const [receiptPrefix,      setReceiptPrefix]      = useState(shop?.receipt_number_prefix ?? "")
+  const [savingReceipt,      setSavingReceipt]      = useState(false)
+
+  // Tax settings (separate tab — taxes affect sales calculations, not just display)
+  const [shopTaxRates, setShopTaxRates] = useState<{ label: string; rate: number }[]>(
+    Array.isArray(shop?.tax_rates) ? shop.tax_rates : []
   )
-  const [receiptPrefix,    setReceiptPrefix]    = useState(shop?.receipt_number_prefix ?? "")
-  const [savingReceipt,    setSavingReceipt]    = useState(false)
+  const [savingTaxes, setSavingTaxes] = useState(false)
 
   const plan = subscription?.plan
   const canEditSettings = isOwner(session)
@@ -127,7 +131,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
       receipt_header:        receiptHeader,
       receipt_footer:        receiptFooter,
       receipt_show_logo:     receiptShowLogo,
-      receipt_taxes:         receiptTaxes,
+      receipt_show_branch:   receiptShowBranch,
       receipt_number_prefix: receiptPrefix,
     }).eq("id", session.shop_id!)
     setSavingReceipt(false)
@@ -135,6 +139,20 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
       toast.error(error.message)
     } else {
       toast.success("Receipt settings saved")
+    }
+  }
+
+  async function saveTaxSettings() {
+    setSavingTaxes(true)
+    const supabase = createClient()
+    const { error } = await supabase.from("shops").update({
+      tax_rates: shopTaxRates,
+    }).eq("id", session.shop_id!)
+    setSavingTaxes(false)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Tax settings saved")
     }
   }
 
@@ -243,6 +261,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         <TabsList className="max-w-2xl">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branches">Branches</TabsTrigger>
+          <TabsTrigger value="taxes">Taxes</TabsTrigger>
           <TabsTrigger value="receipt">Receipt</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
@@ -376,19 +395,98 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
           </div>
         </TabsContent>
 
+        {/* Taxes */}
+        <TabsContent value="taxes" className="space-y-4 mt-4 max-w-2xl">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Percent className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm">Tax Rates</CardTitle>
+              </div>
+              <CardDescription>
+                Taxes are applied on top of item prices at checkout and recorded with each sale.
+                They appear as separate lines on printed receipts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {shopTaxRates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No taxes configured. Add a tax rate below to start charging tax on sales.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {shopTaxRates.map((tax, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        value={tax.label}
+                        onChange={(e) => setShopTaxRates((prev) => prev.map((t, j) => j === i ? { ...t, label: e.target.value } : t))}
+                        placeholder="e.g. VAT, Sales Tax"
+                        className="h-9 flex-1"
+                        disabled={!canEditSettings}
+                      />
+                      <div className="relative w-24 shrink-0">
+                        <Input
+                          type="number" min={0} max={100} step="0.01"
+                          value={tax.rate || ""}
+                          onChange={(e) => setShopTaxRates((prev) => prev.map((t, j) => j === i ? { ...t, rate: parseFloat(e.target.value) || 0 } : t))}
+                          placeholder="0"
+                          className="h-9 pr-7"
+                          disabled={!canEditSettings}
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
+                      </div>
+                      {canEditSettings && (
+                        <button
+                          onClick={() => setShopTaxRates((prev) => prev.filter((_, j) => j !== i))}
+                          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {canEditSettings && (
+                <button
+                  onClick={() => setShopTaxRates((prev) => [...prev, { label: "", rate: 0 }])}
+                  className="text-sm text-primary hover:underline"
+                >
+                  + Add tax rate
+                </button>
+              )}
+
+              {canEditSettings && (
+                <Button onClick={saveTaxSettings} disabled={savingTaxes} size="sm">
+                  {savingTaxes && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Save Tax Rates
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Receipt */}
         <TabsContent value="receipt" className="mt-4">
           {(() => {
-            // Mock sale for live preview
+            // Mock sale for live preview — apply current tax rates to show realistic totals
+            const previewItemsSubtotal = 125.50
+            const previewTaxLines = shopTaxRates
+              .filter((t) => t.rate > 0)
+              .map((t) => ({ label: t.label, rate: t.rate, amount: previewItemsSubtotal * t.rate / 100 }))
+            const previewTaxesTotal = previewTaxLines.reduce((s, t) => s + t.amount, 0)
+
             const mockSale: ReceiptSaleData = {
               id: "preview-0000000001",
               saleDate: new Date().toISOString().split("T")[0],
               createdAt: new Date().toISOString(),
               paymentMethod: "cash",
-              totalAmount: 125.50,
+              totalAmount: previewItemsSubtotal + previewTaxesTotal,
               recordedByName: "Jane Doe",
               notes: null,
               branchId: "",
+              taxesSnapshot: previewTaxLines,
               items: [
                 { productName: "Frozen Chicken Wings", unitType: "kg", quantity: 2.5, unitPrice: 28, discountAmount: 0, lineTotal: 70 },
                 { productName: "Cooking Oil (5L)", unitType: "units", quantity: 2, unitPrice: 22, discountAmount: 0, lineTotal: 44 },
@@ -401,12 +499,12 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               header: receiptHeader,
               footer: receiptFooter,
               showLogo: receiptShowLogo,
+              showBranch: receiptShowBranch,
               shopName: shopName,
               shopLogoUrl: shop?.logo_url ?? null,
               branchName: "Main Branch",        // placeholder so preview matches real receipts
               branchAddress: null,
               currency,
-              taxes: receiptTaxes,
               receiptPrefix: receiptPrefix,
             }
             const previewWidth = receiptFormat === "thermal_58" ? "max-w-[62mm]" : receiptFormat === "thermal_80" ? "max-w-[84mm]" : "max-w-[420px]"
@@ -466,49 +564,12 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
                     <Switch checked={receiptShowLogo} onCheckedChange={setReceiptShowLogo} />
                   </div>
 
-                  {/* Taxes */}
-                  <div className="space-y-2 border-t pt-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Taxes</Label>
-                      <button
-                        onClick={() => setReceiptTaxes((prev) => [...prev, { label: "Tax", rate: 0 }])}
-                        className="text-[10px] text-primary hover:underline"
-                      >
-                        + Add tax
-                      </button>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Show Branch Name</Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Display branch name &amp; address</p>
                     </div>
-                    {receiptTaxes.length === 0 ? (
-                      <p className="text-[10px] text-muted-foreground">No taxes — click &ldquo;Add tax&rdquo; to add one.</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {receiptTaxes.map((tax, i) => (
-                          <div key={i} className="flex items-center gap-1.5">
-                            <Input
-                              value={tax.label}
-                              onChange={(e) => setReceiptTaxes((prev) => prev.map((t, j) => j === i ? { ...t, label: e.target.value } : t))}
-                              placeholder="VAT"
-                              className="h-7 text-xs flex-1"
-                            />
-                            <div className="relative w-16 shrink-0">
-                              <Input
-                                type="number" min={0} max={100} step="0.01"
-                                value={tax.rate || ""}
-                                onChange={(e) => setReceiptTaxes((prev) => prev.map((t, j) => j === i ? { ...t, rate: parseFloat(e.target.value) || 0 } : t))}
-                                placeholder="0"
-                                className="h-7 text-xs pr-5"
-                              />
-                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
-                            </div>
-                            <button
-                              onClick={() => setReceiptTaxes((prev) => prev.filter((_, j) => j !== i))}
-                              className="h-7 w-7 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <Switch checked={receiptShowBranch} onCheckedChange={setReceiptShowBranch} />
                   </div>
 
                   {/* Receipt number prefix */}

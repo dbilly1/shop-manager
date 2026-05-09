@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -61,8 +61,25 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
   const [loading, setLoading] = useState(false)
   const [completedSale, setCompletedSale] = useState<ReceiptSaleData | null>(null)
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [shopTaxRates, setShopTaxRates] = useState<{ label: string; rate: number }[]>([])
+  const taxRatesFetchedRef = useRef(false)
 
   const showBackdate = session.role ? canBackdateSales(session.role) : false
+
+  // Fetch shop tax rates once
+  useEffect(() => {
+    if (taxRatesFetchedRef.current || !session.shop_id) return
+    taxRatesFetchedRef.current = true
+    const supabase = createClient()
+    supabase
+      .from("shops")
+      .select("tax_rates")
+      .eq("id", session.shop_id)
+      .single()
+      .then(({ data }) => {
+        if (data && Array.isArray(data.tax_rates)) setShopTaxRates(data.tax_rates)
+      })
+  }, [session.shop_id])
 
   function addLine() {
     if (branchProducts.length === 0) return
@@ -139,7 +156,12 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
     setLines((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  const total = lines.reduce((s, l) => s + (l.unit_price * l.quantity - l.discount), 0)
+  const preTaxTotal = lines.reduce((s, l) => s + (l.unit_price * l.quantity - l.discount), 0)
+  const taxLines = shopTaxRates
+    .filter((t) => t.rate > 0)
+    .map((t) => ({ label: t.label, rate: t.rate, amount: preTaxTotal * t.rate / 100 }))
+  const taxesTotal = taxLines.reduce((s, t) => s + t.amount, 0)
+  const total = preTaxTotal + taxesTotal
 
   async function handleSubmit() {
     if (lines.length === 0) {
@@ -194,6 +216,11 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
       return
     }
 
+    // Persist tax snapshot for historical receipt accuracy
+    if (taxLines.length > 0 && saleId) {
+      await supabase.from("sales").update({ taxes_snapshot: taxLines }).eq("id", String(saleId))
+    }
+
     await logAuditAction({
       branchId,
       action: "CREATE_SALE",
@@ -214,6 +241,7 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
       recordedByName: session.full_name ?? null,
       notes: null,
       branchId,
+      taxesSnapshot: taxLines,
       items: lines.map((l) => ({
         productName: l.product_name,
         unitType: l.unit_type,
@@ -332,10 +360,29 @@ export function NewSaleForm({ branchProducts, customers, currency, session, bran
           {lines.length > 0 && (
             <>
               <Separator />
-              <div className="flex justify-between text-sm font-medium">
-                <span>Total</span>
-                <span>{formatCurrency(total, currency)}</span>
-              </div>
+              {taxLines.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(preTaxTotal, currency)}</span>
+                  </div>
+                  {taxLines.map((t, i) => (
+                    <div key={i} className="flex justify-between text-sm text-muted-foreground">
+                      <span>{t.label} ({t.rate}%)</span>
+                      <span>{formatCurrency(t.amount, currency)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Total</span>
+                    <span>{formatCurrency(total, currency)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between text-sm font-medium">
+                  <span>Total</span>
+                  <span>{formatCurrency(total, currency)}</span>
+                </div>
+              )}
             </>
           )}
         </CardContent>

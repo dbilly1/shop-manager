@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Printer, Loader2, Receipt, X } from "lucide-react"
+import { Printer, Loader2, Receipt } from "lucide-react"
 import { toast } from "sonner"
 import { ReceiptPreview, type ReceiptSaleData, type ReceiptConfig } from "./receipt-preview"
 import type { SessionContext } from "@/types"
@@ -50,7 +50,6 @@ function printReceipt(ref: React.RefObject<HTMLDivElement | null>, format: strin
 <body class="bg-white">
   ${html}
   <script>
-    // Wait for Tailwind to load before printing
     window.addEventListener("load", function() {
       setTimeout(function() { window.print(); window.close(); }, 500);
     });
@@ -71,7 +70,7 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
   const [header,        setHeader]        = useState("Thank you for your purchase!")
   const [footer,        setFooter]        = useState("")
   const [showLogo,      setShowLogo]      = useState(true)
-  const [taxes,         setTaxes]         = useState<{ label: string; rate: number }[]>([])
+  const [showBranch,    setShowBranch]    = useState(false)
   const [receiptPrefix, setReceiptPrefix] = useState("")
 
   // Fetched shop / branch data
@@ -91,7 +90,7 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("name, logo_url, receipt_format, receipt_header, receipt_footer, receipt_show_logo, receipt_taxes, receipt_number_prefix")
+        .select("name, logo_url, receipt_format, receipt_header, receipt_footer, receipt_show_logo, receipt_show_branch, receipt_number_prefix")
         .eq("id", session.shop_id!)
         .single()
 
@@ -102,7 +101,7 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
         setHeader(shop.receipt_header ?? "Thank you for your purchase!")
         setFooter(shop.receipt_footer ?? "")
         setShowLogo(shop.receipt_show_logo ?? true)
-        setTaxes(Array.isArray(shop.receipt_taxes) ? shop.receipt_taxes : [])
+        setShowBranch(shop.receipt_show_branch ?? true)
         setReceiptPrefix(shop.receipt_number_prefix ?? "")
       }
 
@@ -124,7 +123,7 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
     return () => { cancelled = true }
   }, [open, session.shop_id, sale.branchId])
 
-  // Save receipt defaults back to shop settings
+  // Save receipt display defaults back to shop settings
   const saveDefaults = useCallback(async () => {
     const supabase = createClient()
     await supabase.from("shops").update({
@@ -132,18 +131,17 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
       receipt_header:        header,
       receipt_footer:        footer,
       receipt_show_logo:     showLogo,
-      receipt_taxes:         taxes,
+      receipt_show_branch:   showBranch,
       receipt_number_prefix: receiptPrefix,
     }).eq("id", session.shop_id!)
     toast.success("Receipt defaults saved")
-  }, [format, header, footer, showLogo, taxes, receiptPrefix, session.shop_id])
+  }, [format, header, footer, showLogo, showBranch, receiptPrefix, session.shop_id])
 
   const cfg: ReceiptConfig = {
-    title, format, header, footer, showLogo,
+    title, format, header, footer, showLogo, showBranch,
     shopName, shopLogoUrl,
     branchName, branchAddress,
     currency,
-    taxes,
     receiptPrefix,
   }
 
@@ -216,49 +214,9 @@ export function ReceiptModal({ open, onClose, sale, session, currency, previewOn
                 <Switch checked={showLogo} onCheckedChange={setShowLogo} />
               </div>
 
-              {/* Taxes */}
-              <div className="space-y-2 border-t pt-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Taxes</Label>
-                  <button
-                    onClick={() => setTaxes((prev) => [...prev, { label: "Tax", rate: 0 }])}
-                    className="text-[10px] text-primary hover:underline"
-                  >
-                    + Add tax
-                  </button>
-                </div>
-                {taxes.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground">No taxes — click &ldquo;Add tax&rdquo; to add one.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {taxes.map((tax, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <Input
-                          value={tax.label}
-                          onChange={(e) => setTaxes((prev) => prev.map((t, j) => j === i ? { ...t, label: e.target.value } : t))}
-                          placeholder="VAT"
-                          className="h-7 text-xs flex-1"
-                        />
-                        <div className="relative w-16 shrink-0">
-                          <Input
-                            type="number" min={0} max={100} step="0.01"
-                            value={tax.rate || ""}
-                            onChange={(e) => setTaxes((prev) => prev.map((t, j) => j === i ? { ...t, rate: parseFloat(e.target.value) || 0 } : t))}
-                            placeholder="0"
-                            className="h-7 text-xs pr-5"
-                          />
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
-                        </div>
-                        <button
-                          onClick={() => setTaxes((prev) => prev.filter((_, j) => j !== i))}
-                          className="h-7 w-7 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Show Branch Name</Label>
+                <Switch checked={showBranch} onCheckedChange={setShowBranch} />
               </div>
 
               {/* Receipt number prefix */}

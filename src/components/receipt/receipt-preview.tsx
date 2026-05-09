@@ -10,10 +10,12 @@ export interface ReceiptSaleData {
   saleDate: string
   createdAt: string
   paymentMethod: string
-  totalAmount: number
+  totalAmount: number          // tax-inclusive grand total (what customer paid)
   recordedByName: string | null
   notes: string | null
   branchId: string
+  // Snapshot of taxes applied at checkout — empty for sales with no taxes
+  taxesSnapshot: { label: string; rate: number; amount: number }[]
   items: {
     productName: string
     unitType: string
@@ -30,13 +32,13 @@ export interface ReceiptConfig {
   footer: string
   format: "a4" | "thermal_58" | "thermal_80"
   showLogo: boolean
+  showBranch: boolean          // toggle branch name / address display
   shopName: string
   shopLogoUrl: string | null
   branchName: string | null
   branchAddress: string | null
   currency: string
-  taxes: { label: string; rate: number }[]  // e.g. [{ label: "VAT", rate: 15 }]
-  receiptPrefix: string                      // e.g. "INV-" → "INV-AB1234C5DE"
+  receiptPrefix: string        // e.g. "INV-" → "#INV-AB1234C5DE"
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -67,12 +69,15 @@ function fmtQty(qty: number, unitType: string) {
 function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig }) {
   const fc = (n: number) => formatCurrency(n, cfg.currency)
   const discount = sale.items.reduce((s, i) => s + i.discountAmount, 0)
-  const activeTaxes = cfg.taxes.filter((t) => t.rate > 0)
-  const taxLines = activeTaxes.map((t) => ({
-    label: t.label, rate: t.rate, amount: sale.totalAmount * t.rate / 100,
-  }))
-  const totalTax = taxLines.reduce((s, t) => s + t.amount, 0)
-  const grandTotal = sale.totalAmount + totalTax
+
+  // Taxes come from the snapshot recorded at checkout
+  const taxLines = (sale.taxesSnapshot ?? []).filter((t) => t.amount > 0)
+  const taxesTotal = taxLines.reduce((s, t) => s + t.amount, 0)
+
+  // sale.totalAmount is already the tax-inclusive grand total
+  const grandTotal = sale.totalAmount
+  // Pre-tax subtotal = grand total minus taxes
+  const subtotalBeforeTax = grandTotal - taxesTotal
 
   return (
     <div className="bg-white text-black font-sans w-full max-w-[210mm] mx-auto">
@@ -83,8 +88,12 @@ function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig })
           <img src={cfg.shopLogoUrl} alt={cfg.shopName} className="h-12 object-contain mb-3" />
         )}
         <h1 className="text-2xl font-bold tracking-tight">{cfg.shopName}</h1>
-        {cfg.branchName && <p className="text-sm text-gray-600 mt-0.5">{cfg.branchName}</p>}
-        {cfg.branchAddress && <p className="text-xs text-gray-400 mt-0.5">{cfg.branchAddress}</p>}
+        {cfg.showBranch && cfg.branchName && (
+          <p className="text-sm text-gray-600 mt-0.5">{cfg.branchName}</p>
+        )}
+        {cfg.showBranch && cfg.branchAddress && (
+          <p className="text-xs text-gray-400 mt-0.5">{cfg.branchAddress}</p>
+        )}
         {cfg.header && <p className="text-sm text-gray-500 mt-2 italic">{cfg.header}</p>}
       </div>
 
@@ -139,7 +148,7 @@ function A4Receipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConfig })
           {taxLines.length > 0 && (
             <div className="flex justify-between text-sm text-gray-500">
               <span>Subtotal</span>
-              <span>{fc(sale.totalAmount)}</span>
+              <span>{fc(subtotalBeforeTax)}</span>
             </div>
           )}
           {taxLines.map((t, i) => (
@@ -177,12 +186,11 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
   const w = isNarrow ? "max-w-[54mm]" : "max-w-[76mm]"
   const dash = "─".repeat(isNarrow ? 28 : 36)
   const discount = sale.items.reduce((s, i) => s + i.discountAmount, 0)
-  const activeTaxes = cfg.taxes.filter((t) => t.rate > 0)
-  const taxLines = activeTaxes.map((t) => ({
-    label: t.label, rate: t.rate, amount: sale.totalAmount * t.rate / 100,
-  }))
-  const totalTax = taxLines.reduce((s, t) => s + t.amount, 0)
-  const grandTotal = sale.totalAmount + totalTax
+
+  const taxLines = (sale.taxesSnapshot ?? []).filter((t) => t.amount > 0)
+  const taxesTotal = taxLines.reduce((s, t) => s + t.amount, 0)
+  const grandTotal = sale.totalAmount
+  const subtotalBeforeTax = grandTotal - taxesTotal
 
   return (
     <div className={`bg-white text-black font-mono text-[11px] leading-snug mx-auto ${w} px-2 py-4`}>
@@ -193,8 +201,10 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
           <img src={cfg.shopLogoUrl} alt={cfg.shopName} className="h-8 object-contain mx-auto mb-1" />
         )}
         <p className="font-bold text-sm">{cfg.shopName}</p>
-        {cfg.branchName && <p>{cfg.branchName}</p>}
-        {cfg.branchAddress && <p className="text-[10px] text-gray-600">{cfg.branchAddress}</p>}
+        {cfg.showBranch && cfg.branchName && <p>{cfg.branchName}</p>}
+        {cfg.showBranch && cfg.branchAddress && (
+          <p className="text-[10px] text-gray-600">{cfg.branchAddress}</p>
+        )}
         {cfg.header && <p className="text-[10px] italic mt-1">{cfg.header}</p>}
       </div>
 
@@ -212,20 +222,15 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
 
       {/* Items */}
       <div className="my-2 space-y-0.5">
-        {sale.items.map((item, i) => {
-          const line1 = item.productName
-          const line2 = `  ${fmtQty(item.quantity, item.unitType)} x ${fc(item.unitPrice)}`
-          const total = fc(item.lineTotal).padStart(isNarrow ? 28 - line2.length : 36 - line2.length)
-          return (
-            <div key={i}>
-              <p className="font-medium truncate">{line1}</p>
-              <p className="flex justify-between">
-                <span>{line2.trim()}</span>
-                <span className="font-medium">{fc(item.lineTotal)}</span>
-              </p>
-            </div>
-          )
-        })}
+        {sale.items.map((item, i) => (
+          <div key={i}>
+            <p className="font-medium truncate">{item.productName}</p>
+            <p className="flex justify-between">
+              <span>{fmtQty(item.quantity, item.unitType)} x {fc(item.unitPrice)}</span>
+              <span className="font-medium">{fc(item.lineTotal)}</span>
+            </p>
+          </div>
+        ))}
       </div>
 
       <p className="text-center text-gray-400">{dash}</p>
@@ -241,7 +246,7 @@ function ThermalReceipt({ sale, cfg }: { sale: ReceiptSaleData; cfg: ReceiptConf
         {taxLines.length > 0 && (
           <div className="flex justify-between text-[10px] text-gray-600">
             <span>Subtotal</span>
-            <span>{fc(sale.totalAmount)}</span>
+            <span>{fc(subtotalBeforeTax)}</span>
           </div>
         )}
         {taxLines.map((t, i) => (

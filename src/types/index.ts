@@ -78,7 +78,8 @@ export interface Shop {
   receipt_header: string
   receipt_footer: string
   receipt_show_logo: boolean
-  receipt_taxes: { label: string; rate: number }[]
+  receipt_show_branch: boolean
+  tax_rates: { label: string; rate: number }[]
   receipt_number_prefix: string
   created_at: string
 }
@@ -192,6 +193,7 @@ export interface Sale {
   customer_id: string | null
   recorded_by: string
   created_at: string
+  taxes_snapshot: { label: string; rate: number; amount: number }[]
   sale_items?: SaleItem[]
   customer?: Customer
 }

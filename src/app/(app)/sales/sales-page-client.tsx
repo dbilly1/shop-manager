@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
@@ -80,6 +80,7 @@ interface IndividualSale {
   recorded_by_name: string | null
   notes: string | null
   batch_id: string | null
+  taxes_snapshot: { label: string; rate: number; amount: number }[]
   sale_items: SaleItem[]
 }
 
@@ -143,6 +144,7 @@ function saleToReceiptData(sale: IndividualSale): ReceiptSaleData {
     recordedByName: sale.recorded_by_name,
     notes: sale.notes,
     branchId: sale.sale_items[0]?.branch_id ?? "",
+    taxesSnapshot: sale.taxes_snapshot ?? [],
     items: sale.sale_items.map((item) => {
       const ut  = item.product?.unit_type ?? "units"
       const qty = ut === "kg" ? item.quantity_kg : item.quantity_units
@@ -452,6 +454,10 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [newCustomerPhone, setNewCustomerPhone] = useState("")
   const [addingCustomer, setAddingCustomer] = useState(false)
 
+  // Shop tax rates — loaded once; applied at checkout and snapshotted on each sale
+  const [shopTaxRates, setShopTaxRates] = useState<{ label: string; rate: number }[]>([])
+  const taxRatesFetchedRef = useRef(false)
+
   // Right panel
   const [todaySales, setTodaySales] = useState<IndividualSale[]>([])
   const [todayLoading, setTodayLoading] = useState(isSalesperson)
@@ -469,7 +475,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     const branchId = session.branch_id ?? selectedBranchId
     let q = supabase
       .from("sales")
-      .select("id, sale_date, total_amount, payment_method, customer_id, created_at, recorded_by, recorded_by_name, notes, batch_id, sale_items(id, branch_id, product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type, units_per_box)))")
+      .select("id, sale_date, total_amount, payment_method, customer_id, created_at, recorded_by, recorded_by_name, notes, batch_id, taxes_snapshot, sale_items(id, branch_id, product_id, quantity_kg, quantity_units, quantity_boxes, unit_price, line_total, product:products(name, unit_type, units_per_box)))")
       .eq("shop_id", session.shop_id!)
       .eq("sale_date", date)
       .order("created_at", { ascending: false })
@@ -490,6 +496,21 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   // The setState calls inside loadTodaySales are intentional (loading state + data).
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadTodaySales() }, [loadTodaySales])
+
+  // Fetch shop tax rates once on mount
+  useEffect(() => {
+    if (taxRatesFetchedRef.current || !session.shop_id) return
+    taxRatesFetchedRef.current = true
+    const supabase = createClient()
+    supabase
+      .from("shops")
+      .select("tax_rates")
+      .eq("id", session.shop_id)
+      .single()
+      .then(({ data }) => {
+        if (data && Array.isArray(data.tax_rates)) setShopTaxRates(data.tax_rates)
+      })
+  }, [session.shop_id])
 
   async function handleDateClick(date: string) {
     setSelectedDate(date)
@@ -533,7 +554,12 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     const boxAmt = l.units_per_box ? l.unit_price * l.units_per_box * l.boxes : 0
     return s + Math.max(0, l.unit_price * l.quantity + boxAmt - l.discount)
   }, 0)
-  const total = Math.max(0, subtotal - saleDiscount)
+  const preTaxTotal = Math.max(0, subtotal - saleDiscount)
+  const taxLines = shopTaxRates
+    .filter((t) => t.rate > 0)
+    .map((t) => ({ label: t.label, rate: t.rate, amount: preTaxTotal * t.rate / 100 }))
+  const taxesTotal = taxLines.reduce((s, t) => s + t.amount, 0)
+  const total = preTaxTotal + taxesTotal
 
   async function handleSubmit() {
     if (lines.length === 0) { setError("Add at least one item"); return }
@@ -575,6 +601,11 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     })
 
     if (rpcError || !saleId) { setError(rpcError?.message ?? "Failed to record sale"); setLoading(false); return }
+
+    // Persist the tax snapshot on the sale record for historical accuracy
+    if (taxLines.length > 0) {
+      await supabase.from("sales").update({ taxes_snapshot: taxLines }).eq("id", String(saleId))
+    }
 
     void logAuditAction({ branchId, action: "CREATE_SALE", entityType: "sale", entityId: String(saleId), newValues: { total_amount: total, payment_method: paymentMethod, sale_date: saleDate, items_count: lines.length } })
     toast.success("Sale recorded")
@@ -957,7 +988,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
             <span className="tabular-nums">{formatCurrency(subtotal, currency)}</span>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm">Sale Discount</span>
+            <span className="text-sm text-muted-foreground">Sale Discount</span>
             <Input
               type="number" min={0} step="any"
               value={saleDiscount || ""}
@@ -966,6 +997,20 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
               className="h-7 w-28 text-sm text-right"
             />
           </div>
+          {taxLines.length > 0 && (
+            <>
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Pre-tax</span>
+                <span className="tabular-nums">{formatCurrency(preTaxTotal, currency)}</span>
+              </div>
+              {taxLines.map((t, i) => (
+                <div key={i} className="flex justify-between text-sm text-muted-foreground">
+                  <span>{t.label} ({t.rate}%)</span>
+                  <span className="tabular-nums">{formatCurrency(t.amount, currency)}</span>
+                </div>
+              ))}
+            </>
+          )}
           <div className="flex justify-between items-center">
             <span className="font-bold text-sm">Total</span>
             <span className="font-bold text-primary text-base tabular-nums">{formatCurrency(total, currency)}</span>
