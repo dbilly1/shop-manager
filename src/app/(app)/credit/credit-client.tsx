@@ -35,8 +35,14 @@ import {
   TrendingDown,
   CheckCircle2,
   ArrowDownLeft,
+  ChevronDown,
+  ShoppingCart,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
 import type { SessionContext } from "@/types";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,8 +77,6 @@ interface Props {
   session: SessionContext;
 }
 
-// ─── Grouped customer shape ───────────────────────────────────────────────────
-
 interface CustomerGroup {
   customerId: string;
   name: string;
@@ -81,9 +85,30 @@ interface CustomerGroup {
   totalPaid: number;
   outstanding: number;
   sales: CreditSaleRow[];
-  /** branch_id from the first credit sale — used when session.branch_id is null */
   branchId: string;
 }
+
+// ─── Ledger entry (merged sale + payment) ────────────────────────────────────
+
+type LedgerEntry =
+  | {
+      kind: "sale";
+      id: string;
+      date: string;
+      debit: number;
+      balance: number; // running balance after this entry
+      amountPaid: number;
+    }
+  | {
+      kind: "payment";
+      id: string;
+      date: string;
+      credit: number;
+      balance: number; // running balance after this entry
+      method: string;
+      notes: string | null;
+      recordedBy: string | null;
+    };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -91,20 +116,42 @@ function todayIso(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+function methodLabel(method: string) {
+  if (method === "cash") return "Cash";
+  if (method === "mobile_money") return "Mobile Money";
+  return method;
+}
+
+function MethodBadge({ method }: { method: string }) {
+  if (method === "cash")
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
+        <Banknote className="size-3" />
+        Cash
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-600">
+      <Smartphone className="size-3" />
+      Mobile Money
+    </span>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CreditClient({
   creditSales,
   currency,
+  overdueThreshold,
   session,
 }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
-  // ── Selection state ──────────────────────────────────────────────────────
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
-    null,
-  );
+  // ── Selection ────────────────────────────────────────────────────────────
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // ── Payment dialog ───────────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
@@ -113,19 +160,11 @@ export function CreditClient({
   const [payDate, setPayDate] = useState(todayIso());
   const [payLoading, setPayLoading] = useState(false);
 
-  // ── Add customer dialog ──────────────────────────────────────────────────
-  const [addOpen, setAddOpen] = useState(false);
-  const [addName, setAddName] = useState("");
-  const [addPhone, setAddPhone] = useState("");
-  const [addLoading, setAddLoading] = useState(false);
-
-  // ── Edit customer dialog ─────────────────────────────────────────────────
+  // ── Edit / Delete dialogs ────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editLoading, setEditLoading] = useState(false);
-
-  // ── Delete dialog ────────────────────────────────────────────────────────
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -133,10 +172,9 @@ export function CreditClient({
   const [payments, setPayments] = useState<CreditPayment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
 
-  // ─── Group credit sales by customer ─────────────────────────────────────
+  // ─── Group credit sales by customer ──────────────────────────────────────
   const customerGroups = useMemo<CustomerGroup[]>(() => {
     const map = new Map<string, CustomerGroup>();
-
     for (const row of creditSales) {
       const cid = row.customer_id;
       if (!map.has(cid)) {
@@ -157,19 +195,85 @@ export function CreditClient({
       g.outstanding += row.balance;
       g.sales.push(row);
     }
-
-    return Array.from(map.values()).sort(
-      (a, b) => b.outstanding - a.outstanding,
-    );
+    return Array.from(map.values()).sort((a, b) => b.outstanding - a.outstanding);
   }, [creditSales]);
 
   const selectedGroup = useMemo(
-    () =>
-      customerGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
+    () => customerGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
     [customerGroups, selectedCustomerId],
   );
 
-  // ─── Load payment history whenever selection changes ─────────────────────
+  // ─── Build chronological ledger ───────────────────────────────────────────
+  const ledger = useMemo<LedgerEntry[]>(() => {
+    if (!selectedGroup) return [];
+
+    // Merge sales + payments into one list with a sort key
+    const raw: ({ sortDate: string } & (
+      | { kind: "sale"; row: CreditSaleRow }
+      | { kind: "payment"; row: CreditPayment }
+    ))[] = [
+      ...selectedGroup.sales.map((row) => ({
+        kind: "sale" as const,
+        sortDate: row.sale?.sale_date ?? row.created_at.slice(0, 10),
+        row,
+      })),
+      ...payments.map((row) => ({
+        kind: "payment" as const,
+        sortDate: row.payment_date,
+        row,
+      })),
+    ];
+
+    raw.sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+
+    // Compute running balance
+    let running = 0;
+    return raw.map(({ kind, sortDate, row }) => {
+      if (kind === "sale") {
+        const s = row as CreditSaleRow;
+        running += s.amount_owed;
+        return {
+          kind: "sale",
+          id: s.id,
+          date: sortDate,
+          debit: s.amount_owed,
+          balance: running,
+          amountPaid: s.amount_paid,
+        } satisfies LedgerEntry;
+      } else {
+        const p = row as CreditPayment;
+        running -= p.amount;
+        return {
+          kind: "payment",
+          id: p.id,
+          date: sortDate,
+          credit: p.amount,
+          balance: running,
+          method: p.payment_method,
+          notes: p.notes,
+          recordedBy: p.recorded_by,
+        } satisfies LedgerEntry;
+      }
+    });
+  }, [selectedGroup, payments]);
+
+  // Reverse for display (newest first)
+  const ledgerDesc = useMemo(() => [...ledger].reverse(), [ledger]);
+
+  // Ledger pagination
+  const {
+    paginatedData: ledgerPage,
+    page: ledgerCurrentPage,
+    setPage: setLedgerPage,
+    pageSize: ledgerPageSize,
+    setPageSize: setLedgerPageSize,
+    totalPages: ledgerTotalPages,
+    totalItems: ledgerTotalItems,
+    startIndex: ledgerStart,
+    endIndex: ledgerEnd,
+  } = usePagination(ledgerDesc);
+
+  // ─── Load payments on customer select ────────────────────────────────────
   const loadPayments = useCallback(
     async (customerId: string) => {
       setPaymentsLoading(true);
@@ -178,56 +282,59 @@ export function CreditClient({
         .select("*")
         .eq("customer_id", customerId)
         .order("payment_date", { ascending: false });
-
-      if (error) {
-        toast.error("Failed to load payment history");
-      } else {
-        setPayments((data as CreditPayment[]) ?? []);
-      }
+      if (error) toast.error("Failed to load payment history");
+      else setPayments((data as CreditPayment[]) ?? []);
       setPaymentsLoading(false);
     },
     [supabase],
   );
 
-  // Legitimate fetch-on-customer-change. setState calls inside loadPayments
-  // are necessary to populate the panel.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (selectedCustomerId) {
+      setExpandedId(null);
       loadPayments(selectedCustomerId);
     } else {
       setPayments([]);
     }
   }, [selectedCustomerId, loadPayments]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // ─── Overdue check ────────────────────────────────────────────────────────
+  function isOverdue(group: CustomerGroup) {
+    const oldest = group.sales.reduce<string | null>((min, s) => {
+      const d = s.sale?.sale_date ?? s.created_at.slice(0, 10);
+      return !min || d < min ? d : min;
+    }, null);
+    if (!oldest) return false;
+    const days = Math.floor(
+      (Date.now() - new Date(oldest + "T00:00:00").getTime()) / 86400000,
+    );
+    return days > overdueThreshold;
+  }
 
   // ─── Record payment ───────────────────────────────────────────────────────
   async function handleRecordPayment() {
     if (!selectedGroup) return;
     const amount = parseFloat(payAmount);
-    if (!amount || amount <= 0) {
-      toast.error("Enter a valid amount");
-      return;
-    }
+    if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
 
     setPayLoading(true);
     const branchId = session.branch_id ?? selectedGroup.branchId;
 
-    const { data: payment, error } = await supabase.from("credit_payments").insert({
-      shop_id: session.shop_id,
-      branch_id: branchId,
-      customer_id: selectedGroup.customerId,
-      amount,
-      payment_method: payMethod,
-      payment_date: payDate,
-      recorded_by: session.user_id,
-    }).select().single();
+    const { data: payment, error } = await supabase
+      .from("credit_payments")
+      .insert({
+        shop_id: session.shop_id,
+        branch_id: branchId,
+        customer_id: selectedGroup.customerId,
+        amount,
+        payment_method: payMethod,
+        payment_date: payDate,
+        recorded_by: session.user_id,
+      })
+      .select()
+      .single();
 
-    if (error) {
-      toast.error(error.message);
-      setPayLoading(false);
-      return;
-    }
+    if (error) { toast.error(error.message); setPayLoading(false); return; }
 
     await logAuditAction({
       branchId,
@@ -237,23 +344,19 @@ export function CreditClient({
       newValues: { amount, payment_method: payMethod, customer_id: selectedGroup.customerId },
     });
 
-    // Reduce balances oldest-first
     let remaining = amount;
-    const sortedSales = [...selectedGroup.sales].sort(
+    const sorted = [...selectedGroup.sales].sort(
       (a, b) =>
         new Date(a.sale?.sale_date ?? a.created_at).getTime() -
         new Date(b.sale?.sale_date ?? b.created_at).getTime(),
     );
-
-    for (const sale of sortedSales) {
+    for (const sale of sorted) {
       if (remaining <= 0) break;
       if (sale.balance <= 0) continue;
       const deduct = Math.min(remaining, sale.balance);
-      const newPaid = sale.amount_paid + deduct;
-      const newBalance = sale.balance - deduct;
       await supabase
         .from("credit_sales")
-        .update({ amount_paid: newPaid, balance: newBalance })
+        .update({ amount_paid: sale.amount_paid + deduct, balance: sale.balance - deduct })
         .eq("id", sale.id);
       remaining -= deduct;
     }
@@ -266,41 +369,6 @@ export function CreditClient({
     router.refresh();
   }
 
-  // ─── Add customer ─────────────────────────────────────────────────────────
-  async function handleAddCustomer() {
-    if (!addName.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    if (!addPhone.trim()) {
-      toast.error("Phone number is required");
-      return;
-    }
-
-    setAddLoading(true);
-    const branchId = session.branch_id;
-
-    const { error } = await supabase.from("customers").insert({
-      shop_id: session.shop_id,
-      ...(branchId ? { branch_id: branchId } : {}),
-      name: addName.trim(),
-      phone: addPhone.trim() || null,
-    });
-
-    if (error) {
-      toast.error(error.message);
-      setAddLoading(false);
-      return;
-    }
-
-    toast.success("Customer added");
-    setAddOpen(false);
-    setAddName("");
-    setAddPhone("");
-    setAddLoading(false);
-    router.refresh();
-  }
-
   // ─── Edit customer ────────────────────────────────────────────────────────
   function openEditDialog() {
     if (!selectedGroup) return;
@@ -310,28 +378,16 @@ export function CreditClient({
   }
 
   async function handleEditCustomer() {
-    if (!selectedGroup) return;
-    if (!editName.trim()) {
+    if (!selectedGroup || !editName.trim()) {
       toast.error("Name is required");
       return;
     }
-
     setEditLoading(true);
-
     const { error } = await supabase
       .from("customers")
-      .update({
-        name: editName.trim(),
-        phone: editPhone.trim() || null,
-      })
+      .update({ name: editName.trim(), phone: editPhone.trim() || null })
       .eq("id", selectedGroup.customerId);
-
-    if (error) {
-      toast.error(error.message);
-      setEditLoading(false);
-      return;
-    }
-
+    if (error) { toast.error(error.message); setEditLoading(false); return; }
     toast.success("Customer updated");
     setEditOpen(false);
     setEditLoading(false);
@@ -341,26 +397,17 @@ export function CreditClient({
   // ─── Delete customer ──────────────────────────────────────────────────────
   async function handleDeleteCustomer() {
     if (!selectedGroup) return;
-
     if (selectedGroup.sales.length > 0) {
       toast.error("Cannot delete customer with credit history");
       setDeleteOpen(false);
       return;
     }
-
     setDeleteLoading(true);
-
     const { error } = await supabase
       .from("customers")
       .delete()
       .eq("id", selectedGroup.customerId);
-
-    if (error) {
-      toast.error(error.message);
-      setDeleteLoading(false);
-      return;
-    }
-
+    if (error) { toast.error(error.message); setDeleteLoading(false); return; }
     toast.success("Customer deleted");
     setDeleteOpen(false);
     setSelectedCustomerId(null);
@@ -371,26 +418,13 @@ export function CreditClient({
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
-      {/* ── Left panel ── */}
+
+      {/* ── Left panel: customer list ── */}
       <div className="w-72 shrink-0 border-r flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 className="font-semibold text-sm">Customers</h2>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => {
-              setAddName("");
-              setAddPhone("");
-              setAddOpen(true);
-            }}
-            aria-label="New customer"
-          >
-            <Plus className="size-4" />
-          </Button>
         </div>
 
-        {/* Customer list */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
           {customerGroups.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-xs text-center px-4">
@@ -400,6 +434,7 @@ export function CreditClient({
           ) : (
             customerGroups.map((group) => {
               const isActive = group.customerId === selectedCustomerId;
+              const overdue = isOverdue(group);
               return (
                 <button
                   key={group.customerId}
@@ -414,22 +449,26 @@ export function CreditClient({
                     <span className="font-medium text-sm leading-tight line-clamp-1">
                       {group.name}
                     </span>
-                    {group.outstanding > 0 ? (
-                      <Badge variant="destructive" className="shrink-0">
-                        {formatCurrency(group.outstanding, currency)}
-                      </Badge>
-                    ) : (
-                      <Badge className="shrink-0 bg-green-100 text-green-700 border-green-200">
-                        Settled
-                      </Badge>
+                    <Badge
+                      variant="destructive"
+                      className="shrink-0 tabular-nums"
+                    >
+                      {formatCurrency(group.outstanding, currency)}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    {group.phone ? (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Phone className="size-3" />
+                        <span>{group.phone}</span>
+                      </div>
+                    ) : <span />}
+                    {overdue && (
+                      <span className="text-xs font-medium text-red-600">
+                        Overdue
+                      </span>
                     )}
                   </div>
-                  {group.phone && (
-                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                      <Phone className="size-3 shrink-1" />
-                      <span>{group.phone}</span>
-                    </div>
-                  )}
                 </button>
               );
             })
@@ -442,16 +481,13 @@ export function CreditClient({
         {!selectedGroup ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <User className="size-12 opacity-30" />
-            <p className="text-sm">
-              Select a customer to view their credit history
-            </p>
+            <p className="text-sm">Select a customer to view their credit history</p>
           </div>
         ) : (
           <>
             {/* Sticky header */}
             <div className="border-b px-6 py-4 shrink-0 bg-background">
               <div className="flex items-center justify-between gap-4">
-                {/* Avatar + name + phone */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <User className="size-5 text-primary" />
@@ -468,14 +504,8 @@ export function CreditClient({
                     )}
                   </div>
                 </div>
-                {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={openEditDialog}
-                    aria-label="Edit"
-                  >
+                  <Button size="sm" variant="ghost" onClick={openEditDialog} aria-label="Edit">
                     <Pencil className="size-3.5" />
                   </Button>
                   <Button
@@ -507,9 +537,7 @@ export function CreditClient({
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <TrendingDown className="size-3.5 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">
-                      Total Credit
-                    </p>
+                    <p className="text-xs text-muted-foreground">Total Credit</p>
                   </div>
                   <p className="font-bold text-sm tabular-nums">
                     {formatCurrency(selectedGroup.totalOwed, currency)}
@@ -525,16 +553,24 @@ export function CreditClient({
                   </p>
                 </div>
                 <div
-                  className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
+                  className={`rounded-lg border px-4 py-3 ${
+                    selectedGroup.outstanding > 0
+                      ? "bg-red-50 border-red-200"
+                      : "bg-green-50 border-green-200"
+                  }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
                     <ArrowDownLeft
-                      className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`}
+                      className={`size-3.5 ${
+                        selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"
+                      }`}
                     />
                     <p className="text-xs text-muted-foreground">Outstanding</p>
                   </div>
                   <p
-                    className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}
+                    className={`font-bold text-sm tabular-nums ${
+                      selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"
+                    }`}
                   >
                     {formatCurrency(selectedGroup.outstanding, currency)}
                   </p>
@@ -542,150 +578,173 @@ export function CreditClient({
               </div>
             </div>
 
-            {/* Scrollable tables */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* Credit Sales */}
-              <div>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <TrendingDown className="size-4 text-muted-foreground" />
-                  Credit Sales
-                  <Badge variant="secondary" className="text-xs">
-                    {selectedGroup.sales.length}
-                  </Badge>
-                </h3>
-                <div className="border rounded-lg overflow-hidden">
+            {/* ── Ledger ── */}
+            <div className="flex-1 overflow-y-auto">
+              {paymentsLoading ? (
+                <div className="flex items-center justify-center h-40 gap-2 text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  <span className="text-sm">Loading…</span>
+                </div>
+              ) : ledgerDesc.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm gap-2">
+                  <CreditCard className="size-8 opacity-30" />
+                  No transactions yet
+                </div>
+              ) : (
+                <>
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/40 border-b">
-                        <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          Date
-                        </th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          Amount
-                        </th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          Paid
-                        </th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          Balance
-                        </th>
+                    <thead className="sticky top-0 bg-background border-b z-10">
+                      <tr className="text-xs text-muted-foreground">
+                        <th className="px-5 py-3 text-left font-medium w-8" />
+                        <th className="px-3 py-3 text-left font-medium">Date</th>
+                        <th className="px-3 py-3 text-left font-medium">Type</th>
+                        <th className="px-3 py-3 text-right font-medium text-red-600">Debit</th>
+                        <th className="px-3 py-3 text-right font-medium text-green-600">Credit</th>
+                        <th className="px-5 py-3 text-right font-medium">Balance</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {selectedGroup.sales.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            className="px-4 py-8 text-center text-muted-foreground text-sm"
-                          >
-                            No credit sales
-                          </td>
-                        </tr>
-                      ) : (
-                        selectedGroup.sales.map((sale) => (
-                          <tr
-                            key={sale.id}
-                            className="hover:bg-muted/20 transition-colors"
-                          >
-                            <td className="px-4 py-3 text-sm">
-                              {sale.sale?.sale_date
-                                ? formatDate(sale.sale.sale_date)
-                                : "—"}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums font-medium">
-                              {formatCurrency(sale.amount_owed, currency)}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-green-700">
-                              {formatCurrency(sale.amount_paid, currency)}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums">
-                              <span
-                                className={`font-semibold ${sale.balance > 0 ? "text-red-600" : "text-green-700"}`}
-                              >
-                                {formatCurrency(sale.balance, currency)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Payment History */}
-              <div>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="size-4 text-muted-foreground" />
-                  Payments Received
-                  {!paymentsLoading && (
-                    <Badge variant="secondary" className="text-xs">
-                      {payments.length}
-                    </Badge>
-                  )}
-                </h3>
-                <div className="border rounded-lg overflow-hidden">
-                  {paymentsLoading ? (
-                    <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
-                      <span className="text-sm">Loading…</span>
-                    </div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-muted/40 border-b">
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                            Date
-                          </th>
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                            Method
-                          </th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                            Amount
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {payments.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={3}
-                              className="px-4 py-8 text-center text-muted-foreground text-sm"
-                            >
-                              No payments recorded
-                            </td>
-                          </tr>
-                        ) : (
-                          payments.map((p) => (
+                      {ledgerPage.map((entry) => {
+                        const isExpanded = expandedId === entry.id;
+                        return (
+                          <>
+                            {/* Main row */}
                             <tr
-                              key={p.id}
-                              className="hover:bg-muted/20 transition-colors"
+                              key={entry.id}
+                              onClick={() =>
+                                setExpandedId(isExpanded ? null : entry.id)
+                              }
+                              className="hover:bg-muted/40 cursor-pointer transition-colors"
                             >
-                              <td className="px-4 py-3">
-                                {formatDate(p.payment_date)}
+                              {/* Chevron */}
+                              <td className="px-5 py-3 text-muted-foreground">
+                                <ChevronDown
+                                  className={`size-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                />
                               </td>
-                              <td className="px-4 py-3">
-                                {p.payment_method === "cash" ? (
-                                  <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
-                                    Cash
-                                  </Badge>
+
+                              {/* Date */}
+                              <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                                {formatDate(entry.date)}
+                              </td>
+
+                              {/* Type badge */}
+                              <td className="px-3 py-3">
+                                {entry.kind === "sale" ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600">
+                                    <ShoppingCart className="size-3" />
+                                    Sale
+                                  </span>
                                 ) : (
-                                  <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">
-                                    Mobile
-                                  </Badge>
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700">
+                                    <CheckCircle2 className="size-3" />
+                                    Payment
+                                  </span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-right font-bold text-green-700 tabular-nums">
-                                +{formatCurrency(p.amount, currency)}
+
+                              {/* Debit */}
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {entry.kind === "sale" ? (
+                                  <span className="font-medium text-red-600">
+                                    {formatCurrency(entry.debit, currency)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/40">—</span>
+                                )}
+                              </td>
+
+                              {/* Credit */}
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {entry.kind === "payment" ? (
+                                  <span className="font-medium text-green-700">
+                                    {formatCurrency(entry.credit, currency)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/40">—</span>
+                                )}
+                              </td>
+
+                              {/* Running balance */}
+                              <td className="px-5 py-3 text-right tabular-nums">
+                                <span
+                                  className={`font-semibold ${
+                                    entry.balance > 0
+                                      ? "text-red-600"
+                                      : "text-green-700"
+                                  }`}
+                                >
+                                  {formatCurrency(entry.balance, currency)}
+                                </span>
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
+
+                            {/* Expanded detail row */}
+                            {isExpanded && (
+                              <tr key={`${entry.id}-detail`} className="bg-muted/20">
+                                <td colSpan={6} className="px-5 py-4">
+                                  {entry.kind === "sale" ? (
+                                    <div className="flex items-start gap-6 text-sm">
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Amount charged</p>
+                                        <p className="font-semibold text-red-600 tabular-nums">
+                                          {formatCurrency(entry.debit, currency)}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Paid off</p>
+                                        <p className="font-semibold text-green-700 tabular-nums">
+                                          {formatCurrency(entry.amountPaid, currency)}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Remaining on this sale</p>
+                                        <p className="font-semibold tabular-nums">
+                                          {formatCurrency(entry.debit - entry.amountPaid, currency)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-start gap-6 text-sm flex-wrap">
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Method</p>
+                                        <MethodBadge method={entry.method} />
+                                      </div>
+                                      {entry.recordedBy && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-0.5">Recorded by</p>
+                                          <p className="text-sm">{entry.recordedBy}</p>
+                                        </div>
+                                      )}
+                                      {entry.notes && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-0.5">Notes</p>
+                                          <p className="text-sm text-muted-foreground">{entry.notes}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <PaginationBar
+                    page={ledgerCurrentPage}
+                    totalPages={ledgerTotalPages}
+                    totalItems={ledgerTotalItems}
+                    pageSize={ledgerPageSize}
+                    startIndex={ledgerStart}
+                    endIndex={ledgerEnd}
+                    onPageChange={setLedgerPage}
+                    onPageSizeChange={setLedgerPageSize}
+                    label="transaction"
+                  />
+                </>
+              )}
             </div>
           </>
         )}
@@ -706,7 +765,6 @@ export function CreditClient({
                 </span>
               </p>
             )}
-
             <div className="space-y-1.5">
               <Label htmlFor="pay-amount">Amount</Label>
               <Input
@@ -721,14 +779,11 @@ export function CreditClient({
                 onChange={(e) => setPayAmount(e.target.value)}
               />
             </div>
-
             <div className="space-y-1.5">
               <Label htmlFor="pay-method">Payment Method</Label>
               <Select
                 value={payMethod}
-                onValueChange={(v) =>
-                  setPayMethod(v as "cash" | "mobile_money")
-                }
+                onValueChange={(v) => setPayMethod(v as "cash" | "mobile_money")}
               >
                 <SelectTrigger id="pay-method" className="w-full">
                   <SelectValue placeholder="Select method" />
@@ -739,7 +794,6 @@ export function CreditClient({
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1.5">
               <Label htmlFor="pay-date">Date</Label>
               <Input
@@ -749,58 +803,9 @@ export function CreditClient({
                 onChange={(e) => setPayDate(e.target.value)}
               />
             </div>
-
-            <Button
-              className="w-full"
-              onClick={handleRecordPayment}
-              disabled={payLoading}
-            >
+            <Button className="w-full" onClick={handleRecordPayment} disabled={payLoading}>
               {payLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
               Record Payment
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Add Customer Dialog ── */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>New Customer</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="add-name">Full Name</Label>
-              <Input
-                id="add-name"
-                required
-                autoFocus
-                placeholder="Customer name"
-                value={addName}
-                onChange={(e) => setAddName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-phone">
-                Phone Number <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="add-phone"
-                type="tel"
-                placeholder="+1 555 000 0000"
-                value={addPhone}
-                onChange={(e) => setAddPhone(e.target.value)}
-              />
-            </div>
-
-            <Button
-              className="w-full"
-              onClick={handleAddCustomer}
-              disabled={addLoading}
-            >
-              {addLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
-              Add Customer
             </Button>
           </div>
         </DialogContent>
@@ -824,7 +829,6 @@ export function CreditClient({
                 onChange={(e) => setEditName(e.target.value)}
               />
             </div>
-
             <div className="space-y-1.5">
               <Label htmlFor="edit-phone">Phone Number (optional)</Label>
               <Input
@@ -835,12 +839,7 @@ export function CreditClient({
                 onChange={(e) => setEditPhone(e.target.value)}
               />
             </div>
-
-            <Button
-              className="w-full"
-              onClick={handleEditCustomer}
-              disabled={editLoading}
-            >
+            <Button className="w-full" onClick={handleEditCustomer} disabled={editLoading}>
               {editLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
               Save Changes
             </Button>
@@ -857,27 +856,15 @@ export function CreditClient({
           <div className="space-y-4 pt-1">
             <p className="text-sm text-muted-foreground">
               Are you sure you want to delete{" "}
-              <span className="font-medium text-foreground">
-                {selectedGroup?.name}
-              </span>
-              ? This action cannot be undone.
+              <span className="font-medium text-foreground">{selectedGroup?.name}</span>?
+              This action cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteOpen(false)}
-                disabled={deleteLoading}
-              >
+              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteLoading}>
                 Cancel
               </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteCustomer}
-                disabled={deleteLoading}
-              >
-                {deleteLoading && (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                )}
+              <Button variant="destructive" onClick={handleDeleteCustomer} disabled={deleteLoading}>
+                {deleteLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
                 Delete
               </Button>
             </div>
