@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
 import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt, Percent, X } from "lucide-react"
@@ -45,6 +45,7 @@ const isOwner = (session: SessionContext) => session.role === "owner"
 
 export function SettingsClient({ shop, branches, subscription, allPlans, usage, session }: Props) {
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState("general")
   const [saving, setSaving] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
   const [newBranchName, setNewBranchName] = useState("")
@@ -257,18 +258,25 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   return (
     <div className="-m-4 md:-m-6">
 
-      <Tabs defaultValue="general" className="gap-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
 
         {/* ── Sticky tab bar ── */}
-        <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b">
-          <TabsList className="px-4 md:px-6 rounded-none h-auto py-0 bg-transparent gap-1 w-full justify-start border-0">
-            <TabsTrigger value="general"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">General</TabsTrigger>
-            <TabsTrigger value="branches"  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Branches</TabsTrigger>
-            <TabsTrigger value="taxes"     className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Taxes</TabsTrigger>
-            <TabsTrigger value="receipt"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Receipt</TabsTrigger>
-            <TabsTrigger value="billing"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Billing</TabsTrigger>
-            <TabsTrigger value="security"  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Security</TabsTrigger>
-          </TabsList>
+        <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b border-border">
+          <div className="flex gap-1 px-4 md:px-6">
+            {(["general", "branches", "taxes", "receipt", "billing", "security"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-3 text-sm font-medium border-b-2 transition-colors -mb-px capitalize ${
+                  activeTab === tab
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* General */}
