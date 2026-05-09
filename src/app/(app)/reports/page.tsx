@@ -17,33 +17,28 @@ export default async function ReportsPage() {
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
-  // Default: last 30 days
+  // Default date range shown in the filter on load: last 30 days
   const today = new Date()
   const endDate = today.toISOString().split("T")[0]
   const startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split("T")[0]
 
-  // Prior period: same duration immediately before startDate
-  const durationMs = new Date(endDate).getTime() - new Date(startDate).getTime() + 86400000
-  const priorEndDate = new Date(new Date(startDate).getTime() - 86400000).toISOString().split("T")[0]
-  const priorStartDate = new Date(new Date(startDate).getTime() - durationMs).toISOString().split("T")[0]
-
-  // Current period sales
+  // Sales — all time; client filters to selected range and derives prior period itself
   const salesQuery = supabase
     .from("sales")
     .select("sale_date, total_amount, payment_method")
     .eq("shop_id", session.shop_id!)
-    .gte("sale_date", startDate)
-    .lte("sale_date", endDate)
+    .order("sale_date", { ascending: false })
+    .limit(10000)
   if (activeBranchId) salesQuery.eq("branch_id", activeBranchId)
   const { data: sales } = await salesQuery
 
-  // Current period expenses
+  // Expenses — all time
   const expensesQuery = supabase
     .from("expenses")
     .select("expense_date, amount, category")
     .eq("shop_id", session.shop_id!)
-    .gte("expense_date", startDate)
-    .lte("expense_date", endDate)
+    .order("expense_date", { ascending: false })
+    .limit(10000)
   if (activeBranchId) expensesQuery.eq("branch_id", activeBranchId)
   const { data: expenses } = await expensesQuery
 
@@ -64,33 +59,12 @@ export default async function ReportsPage() {
   if (activeBranchId) creditQuery.eq("branch_id", activeBranchId)
   const { data: creditData } = await creditQuery
 
-  // Prior period sales
-  const priorSalesQuery = supabase
-    .from("sales")
-    .select("sale_date, total_amount, payment_method")
-    .eq("shop_id", session.shop_id!)
-    .gte("sale_date", priorStartDate)
-    .lte("sale_date", priorEndDate)
-  if (activeBranchId) priorSalesQuery.eq("branch_id", activeBranchId)
-  const { data: priorSales } = await priorSalesQuery
-
-  // Prior period expenses
-  const priorExpensesQuery = supabase
-    .from("expenses")
-    .select("expense_date, amount")
-    .eq("shop_id", session.shop_id!)
-    .gte("expense_date", priorStartDate)
-    .lte("expense_date", priorEndDate)
-  if (activeBranchId) priorExpensesQuery.eq("branch_id", activeBranchId)
-  const { data: priorExpenses } = await priorExpensesQuery
-
-  // Reconciliation data
+  // Reconciliation data — all time; client filters to selected range
   const reconciliationsQuery = supabase
     .from("reconciliations")
     .select("status, cash_variance, mobile_variance, reconciliation_date")
     .eq("shop_id", session.shop_id!)
-    .gte("reconciliation_date", startDate)
-    .lte("reconciliation_date", endDate)
+    .limit(10000)
   if (activeBranchId) reconciliationsQuery.eq("branch_id", activeBranchId)
   const { data: reconciliations } = await reconciliationsQuery
 
@@ -120,8 +94,6 @@ export default async function ReportsPage() {
       expenses={expenses ?? []}
       saleItems={(saleItems ?? []) as unknown as SbSaleItem[]}
       creditData={creditData ?? []}
-      priorSales={priorSales ?? []}
-      priorExpenses={priorExpenses ?? []}
       reconciliations={(reconciliations ?? []) as unknown as SbReconciliation[]}
       currency={shop?.currency ?? "USD"}
       startDate={startDate}

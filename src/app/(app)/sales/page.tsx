@@ -11,25 +11,22 @@ export default async function SalesPage() {
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
-  const now = new Date()
-  const ninetyDaysAgo = new Date(now.getTime() - 89 * 86400000).toISOString().split("T")[0]
-
-  // Sales (last 90 days)
+  // Sales — all time, no date cap
   const salesQuery = supabase
     .from("sales")
     .select("sale_date, total_amount, payment_method")
     .eq("shop_id", session.shop_id!)
-    .gte("sale_date", ninetyDaysAgo)
     .order("sale_date", { ascending: false })
+    .limit(10000)
   if (activeBranchId) salesQuery.eq("branch_id", activeBranchId)
   const { data: salesRaw } = await salesQuery
 
-  // Reconciliations (last 90 days) — indexed by date
+  // Reconciliations — all time
   const reconQuery = supabase
     .from("reconciliations")
     .select("reconciliation_date, cash_variance, mobile_variance, status")
     .eq("shop_id", session.shop_id!)
-    .gte("reconciliation_date", ninetyDaysAgo)
+    .limit(10000)
   if (activeBranchId) reconQuery.eq("branch_id", activeBranchId)
   const { data: reconRaw } = await reconQuery
 

@@ -1337,7 +1337,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
           <>
             <div className="flex items-baseline justify-between px-6 pt-4 pb-3 border-b shrink-0">
               <h2 className="font-semibold text-sm">All Sales</h2>
-              <span className="text-xs text-muted-foreground">Last 90 days · click a row to see transactions</span>
+              <span className="text-xs text-muted-foreground">All sales · click a row to see transactions</span>
             </div>
             <div className="flex-1 overflow-y-auto">
               <table className="w-full text-sm">

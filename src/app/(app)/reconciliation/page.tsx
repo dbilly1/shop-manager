@@ -36,28 +36,23 @@ export default async function ReconciliationPage() {
   const supabase = await createClient()
   const activeBranchId = await getActiveBranchId(session.branch_id)
 
-  // ── 60 days ago cutoff ──────────────────────────────────────────────────────
-  const sixtyDaysAgo = new Date(new Date().getTime() - 59 * 86400000)
-    .toISOString()
-    .split("T")[0]
-
-  // ── 1. Reconciliations (last 60 days) ───────────────────────────────────────
+  // ── 1. Reconciliations — all time ───────────────────────────────────────────
   const reconQuery = supabase
     .from("reconciliations")
     .select("*")
     .eq("shop_id", session.shop_id)
-    .gte("reconciliation_date", sixtyDaysAgo)
     .order("reconciliation_date", { ascending: false })
+    .limit(10000)
 
   if (activeBranchId) reconQuery.eq("branch_id", activeBranchId)
   const { data: reconciliations } = await reconQuery
 
-  // ── 2. Sales date + batch_id for session-count map ──────────────────────────
+  // ── 2. Sales date + batch_id for session-count map — all time ───────────────
   const salesQuery = supabase
     .from("sales")
     .select("sale_date, batch_id")
     .eq("shop_id", session.shop_id)
-    .gte("sale_date", sixtyDaysAgo)
+    .limit(10000)
 
   if (activeBranchId) salesQuery.eq("branch_id", activeBranchId)
   const { data: salesRows } = await salesQuery

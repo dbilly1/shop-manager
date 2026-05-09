@@ -47,9 +47,7 @@ interface Props {
     sale: { sale_date: string } | null
   }[]
   creditData: { balance: number; amount_paid: number }[]
-  priorSales: { sale_date: string; total_amount: number; payment_method: string }[]
-  priorExpenses: { expense_date: string; amount: number }[]
-  reconciliations: { status: string; cash_variance: number; mobile_variance: number }[]
+  reconciliations: { status: string; cash_variance: number; mobile_variance: number; reconciliation_date?: string }[]
   currency: string
   startDate: string
   endDate: string
@@ -146,8 +144,6 @@ export function ReportsClient({
   expenses,
   saleItems,
   creditData,
-  priorSales,
-  priorExpenses,
   reconciliations,
   currency,
   startDate,
@@ -223,9 +219,27 @@ export function ReportsClient({
   const cogsRatio = totalRevenue > 0 ? totalCOGS / totalRevenue : 0
   const grossMarginPct = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0
 
+  // ── Prior period date range (same duration, immediately before rangeStart) ──
+  const [priorStart, priorEnd] = useMemo(() => {
+    const s = new Date(rangeStart + "T00:00:00")
+    const e = new Date(rangeEnd   + "T00:00:00")
+    const durationMs = e.getTime() - s.getTime() + 86400000
+    const pe = new Date(s.getTime() - 86400000)
+    const ps = new Date(pe.getTime() - durationMs + 86400000)
+    return [ps.toISOString().split("T")[0], pe.toISOString().split("T")[0]]
+  }, [rangeStart, rangeEnd])
+
   // ── Prior period KPIs ──────────────────────────────────────────────────────
-  const priorRevenue = useMemo(() => priorSales.reduce((s, x) => s + x.total_amount, 0), [priorSales])
-  const priorExpensesTotal = useMemo(() => priorExpenses.reduce((s, x) => s + x.amount, 0), [priorExpenses])
+  const priorRevenue = useMemo(
+    () => sales.filter((s) => s.sale_date >= priorStart && s.sale_date <= priorEnd)
+               .reduce((acc, x) => acc + x.total_amount, 0),
+    [sales, priorStart, priorEnd]
+  )
+  const priorExpensesTotal = useMemo(
+    () => expenses.filter((e) => e.expense_date >= priorStart && e.expense_date <= priorEnd)
+                  .reduce((acc, x) => acc + x.amount, 0),
+    [expenses, priorStart, priorEnd]
+  )
   const priorGrossProfit = priorRevenue * (1 - cogsRatio)
   const priorNetProfit = priorGrossProfit - priorExpensesTotal
 
@@ -238,22 +252,29 @@ export function ReportsClient({
   const totalRepaid = useMemo(() => creditData.reduce((s, c) => s + c.amount_paid, 0), [creditData])
   const totalOutstanding = useMemo(() => creditData.reduce((s, c) => s + c.balance, 0), [creditData])
 
-  // ── Reconciliation ─────────────────────────────────────────────────────────
+  // ── Reconciliation — filtered to selected range ─────────────────────────────
+  const filteredRecons = useMemo(
+    () => reconciliations.filter((r) => {
+      if (!r.reconciliation_date) return true
+      return r.reconciliation_date >= rangeStart && r.reconciliation_date <= rangeEnd
+    }),
+    [reconciliations, rangeStart, rangeEnd]
+  )
   const balancedCount = useMemo(
-    () => reconciliations.filter((r) => r.status === "balanced").length,
-    [reconciliations]
+    () => filteredRecons.filter((r) => r.status === "balanced").length,
+    [filteredRecons]
   )
   const flaggedCount = useMemo(
-    () => reconciliations.filter((r) => r.status === "flagged").length,
-    [reconciliations]
+    () => filteredRecons.filter((r) => r.status === "flagged").length,
+    [filteredRecons]
   )
   const totalCashVariance = useMemo(
-    () => reconciliations.reduce((s, r) => s + r.cash_variance, 0),
-    [reconciliations]
+    () => filteredRecons.reduce((s, r) => s + r.cash_variance, 0),
+    [filteredRecons]
   )
   const totalMobileVariance = useMemo(
-    () => reconciliations.reduce((s, r) => s + r.mobile_variance, 0),
-    [reconciliations]
+    () => filteredRecons.reduce((s, r) => s + r.mobile_variance, 0),
+    [filteredRecons]
   )
   const totalNetVariance = totalCashVariance + totalMobileVariance
 
