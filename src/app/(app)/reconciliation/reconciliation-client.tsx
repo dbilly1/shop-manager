@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { usePagination } from "@/hooks/usePagination"
+import { PaginationBar } from "@/components/ui/pagination-bar"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -108,6 +110,19 @@ export function ReconciliationClient({
   const [sessions, setSessions] = useState<SessionData[]>([])
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [submitting, setSubmitting] = useState<number | null>(null)  // index of submitting session
+
+  // Date list pagination
+  const {
+    paginatedData: pagedDates,
+    page: datePage,
+    setPage: setDatePage,
+    pageSize: datePageSize,
+    setPageSize: setDatePageSize,
+    totalPages: dateTotalPages,
+    totalItems: dateTotalItems,
+    startIndex: dateStart,
+    endIndex: dateEnd,
+  } = usePagination(saleDateSessions)
 
   const isBackdated = selectedDate < today
 
@@ -602,7 +617,7 @@ export function ReconciliationClient({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {saleDateSessions.map(({ date, sessionCount }) => {
+              {pagedDates.map(({ date, sessionCount }) => {
                 const dateRecons = reconciliations.filter((r) => r.reconciliation_date === date)
                 const { label, color } = computeHistoryStatus(dateRecons, sessionCount)
                 const isSelected = date === selectedDate
@@ -629,6 +644,17 @@ export function ReconciliationClient({
             </tbody>
           </table>
         )}
+        <PaginationBar
+          page={datePage}
+          totalPages={dateTotalPages}
+          totalItems={dateTotalItems}
+          pageSize={datePageSize}
+          startIndex={dateStart}
+          endIndex={dateEnd}
+          onPageChange={setDatePage}
+          onPageSizeChange={setDatePageSize}
+          label="day"
+        />
       </div>
     </div>
   )

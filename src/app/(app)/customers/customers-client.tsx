@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +66,18 @@ export function CustomersClient({
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone?.includes(search),
   );
+
+  const {
+    paginatedData: page,
+    page: currentPage,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+  } = usePagination(filtered);
 
   async function handleCreate() {
     if (!name.trim()) {
@@ -158,7 +172,7 @@ export function CustomersClient({
                 </td>
               </tr>
             ) : (
-              filtered.map((c) => (
+              page.map((c) => (
                 <tr key={c.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -196,6 +210,17 @@ export function CustomersClient({
             )}
           </tbody>
         </table>
+        <PaginationBar
+          page={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          label="customer"
+        />
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>

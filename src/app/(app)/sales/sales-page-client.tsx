@@ -22,6 +22,8 @@ import { logAuditAction } from "@/lib/audit-action"
 import { BulkEntryDialog } from "./bulk/bulk-sale-form"
 import { ReceiptModal } from "@/components/receipt/receipt-modal"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
+import { usePagination } from "@/hooks/usePagination"
+import { PaginationBar } from "@/components/ui/pagination-bar"
 import type { ReceiptSaleData } from "@/components/receipt/receipt-preview"
 
 interface BranchProduct {
@@ -457,6 +459,19 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   // Shop tax rates — loaded once; applied at checkout and snapshotted on each sale
   const [shopTaxRates, setShopTaxRates] = useState<{ label: string; rate: number }[]>([])
   const taxRatesFetchedRef = useRef(false)
+
+  // Summary table pagination
+  const {
+    paginatedData: pagedSummaries,
+    page: summaryPage,
+    setPage: setSummaryPage,
+    pageSize: summaryPageSize,
+    setPageSize: setSummaryPageSize,
+    totalPages: summaryTotalPages,
+    totalItems: summaryTotalItems,
+    startIndex: summaryStart,
+    endIndex: summaryEnd,
+  } = usePagination(summaries)
 
   // Right panel
   const [todaySales, setTodaySales] = useState<IndividualSale[]>([])
@@ -1358,7 +1373,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                       <td colSpan={7} className="text-center text-muted-foreground py-16 text-sm">No sales recorded yet</td>
                     </tr>
                   ) : (
-                    summaries.map((s) => (
+                    pagedSummaries.map((s) => (
                       <tr
                         key={s.sale_date}
                         onClick={() => handleDateClick(s.sale_date)}
@@ -1377,6 +1392,17 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 </tbody>
               </table>
             </div>
+            <PaginationBar
+              page={summaryPage}
+              totalPages={summaryTotalPages}
+              totalItems={summaryTotalItems}
+              pageSize={summaryPageSize}
+              startIndex={summaryStart}
+              endIndex={summaryEnd}
+              onPageChange={setSummaryPage}
+              onPageSizeChange={setSummaryPageSize}
+              label="day"
+            />
           </>
         )}
       </div>

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logAuditAction } from "@/lib/audit-action";
@@ -232,6 +234,20 @@ export function ExpensesClient({
     router.refresh();
   }
 
+  // ── pagination ─────────────────────────────────────────────────────────────
+
+  const {
+    paginatedData: expPage,
+    page: currentPage,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+  } = usePagination(expenses);
+
   // ── derived ────────────────────────────────────────────────────────────────
 
   const last30Total = expenses
@@ -304,7 +320,7 @@ export function ExpensesClient({
         {/* Header */}
         <div className="px-5 py-4 border-b">
           <h2 className="text-base font-semibold">Expenses</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Last 200 entries</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{expenses.length} total</p>
         </div>
 
         {expenses.length === 0 ? (
@@ -325,7 +341,7 @@ export function ExpensesClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {expenses.map((expense) => (
+              {expPage.map((expense) => (
                 <tr
                   key={expense.id}
                   className="hover:bg-muted/40 transition-colors"
@@ -387,6 +403,17 @@ export function ExpensesClient({
             </tbody>
           </table>
         )}
+        <PaginationBar
+          page={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          label="expense"
+        />
       </main>
 
       {/* ── Add / Edit dialog ─────────────────────────────────────────────────── */}
