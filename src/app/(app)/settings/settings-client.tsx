@@ -74,9 +74,9 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [receiptHeader,    setReceiptHeader]    = useState(shop?.receipt_header ?? "Thank you for your purchase!")
   const [receiptFooter,    setReceiptFooter]    = useState(shop?.receipt_footer ?? "")
   const [receiptShowLogo,  setReceiptShowLogo]  = useState(shop?.receipt_show_logo ?? true)
-  const [receiptTaxEnabled,setReceiptTaxEnabled]= useState(shop?.receipt_tax_enabled ?? false)
-  const [receiptTaxLabel,  setReceiptTaxLabel]  = useState(shop?.receipt_tax_label ?? "Tax")
-  const [receiptTaxRate,   setReceiptTaxRate]   = useState(shop?.receipt_tax_rate ?? 0)
+  const [receiptTaxes,     setReceiptTaxes]     = useState<{ label: string; rate: number }[]>(
+    Array.isArray(shop?.receipt_taxes) ? shop.receipt_taxes : []
+  )
   const [receiptPrefix,    setReceiptPrefix]    = useState(shop?.receipt_number_prefix ?? "")
   const [savingReceipt,    setSavingReceipt]    = useState(false)
 
@@ -127,9 +127,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
       receipt_header:        receiptHeader,
       receipt_footer:        receiptFooter,
       receipt_show_logo:     receiptShowLogo,
-      receipt_tax_enabled:   receiptTaxEnabled,
-      receipt_tax_label:     receiptTaxLabel,
-      receipt_tax_rate:      receiptTaxRate,
+      receipt_taxes:         receiptTaxes,
       receipt_number_prefix: receiptPrefix,
     }).eq("id", session.shop_id!)
     setSavingReceipt(false)
@@ -408,9 +406,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               branchName: "Main Branch",        // placeholder so preview matches real receipts
               branchAddress: null,
               currency,
-              taxEnabled: receiptTaxEnabled,
-              taxLabel: receiptTaxLabel,
-              taxRate: receiptTaxRate,
+              taxes: receiptTaxes,
               receiptPrefix: receiptPrefix,
             }
             const previewWidth = receiptFormat === "thermal_58" ? "max-w-[62mm]" : receiptFormat === "thermal_80" ? "max-w-[84mm]" : "max-w-[420px]"
@@ -470,33 +466,47 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
                     <Switch checked={receiptShowLogo} onCheckedChange={setReceiptShowLogo} />
                   </div>
 
-                  {/* Tax */}
+                  {/* Taxes */}
                   <div className="space-y-2 border-t pt-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Charge Tax</Label>
-                      <Switch checked={receiptTaxEnabled} onCheckedChange={setReceiptTaxEnabled} />
+                      <Label className="text-xs">Taxes</Label>
+                      <button
+                        onClick={() => setReceiptTaxes((prev) => [...prev, { label: "Tax", rate: 0 }])}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        + Add tax
+                      </button>
                     </div>
-                    {receiptTaxEnabled && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Label</Label>
-                          <Input
-                            value={receiptTaxLabel}
-                            onChange={(e) => setReceiptTaxLabel(e.target.value)}
-                            placeholder="VAT"
-                            className="h-7 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Rate (%)</Label>
-                          <Input
-                            type="number" min={0} max={100} step="0.01"
-                            value={receiptTaxRate || ""}
-                            onChange={(e) => setReceiptTaxRate(parseFloat(e.target.value) || 0)}
-                            placeholder="15"
-                            className="h-7 text-xs"
-                          />
-                        </div>
+                    {receiptTaxes.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground">No taxes — click &ldquo;Add tax&rdquo; to add one.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {receiptTaxes.map((tax, i) => (
+                          <div key={i} className="flex items-center gap-1.5">
+                            <Input
+                              value={tax.label}
+                              onChange={(e) => setReceiptTaxes((prev) => prev.map((t, j) => j === i ? { ...t, label: e.target.value } : t))}
+                              placeholder="VAT"
+                              className="h-7 text-xs flex-1"
+                            />
+                            <div className="relative w-16 shrink-0">
+                              <Input
+                                type="number" min={0} max={100} step="0.01"
+                                value={tax.rate || ""}
+                                onChange={(e) => setReceiptTaxes((prev) => prev.map((t, j) => j === i ? { ...t, rate: parseFloat(e.target.value) || 0 } : t))}
+                                placeholder="0"
+                                className="h-7 text-xs pr-5"
+                              />
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                            </div>
+                            <button
+                              onClick={() => setReceiptTaxes((prev) => prev.filter((_, j) => j !== i))}
+                              className="h-7 w-7 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
