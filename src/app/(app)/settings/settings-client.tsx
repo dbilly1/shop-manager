@@ -255,20 +255,24 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   }
 
   return (
-    <div className="space-y-4">
+    <div className="-m-4 md:-m-6">
 
-      <Tabs defaultValue="general">
-        <TabsList className="max-w-2xl">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="branches">Branches</TabsTrigger>
-          <TabsTrigger value="taxes">Taxes</TabsTrigger>
-          <TabsTrigger value="receipt">Receipt</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="general" className="gap-0">
+
+        {/* ── Sticky tab bar ── */}
+        <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b">
+          <TabsList className="px-4 md:px-6 rounded-none h-auto py-0 bg-transparent gap-1 w-full justify-start border-0">
+            <TabsTrigger value="general"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">General</TabsTrigger>
+            <TabsTrigger value="branches"  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Branches</TabsTrigger>
+            <TabsTrigger value="taxes"     className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Taxes</TabsTrigger>
+            <TabsTrigger value="receipt"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Receipt</TabsTrigger>
+            <TabsTrigger value="billing"   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Billing</TabsTrigger>
+            <TabsTrigger value="security"  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1 text-sm">Security</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* General */}
-        <TabsContent value="general" className="space-y-4 mt-4 max-w-2xl">
+        <TabsContent value="general" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Shop Details</CardTitle>
@@ -358,7 +362,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Branches */}
-        <TabsContent value="branches" className="space-y-4 mt-4 max-w-2xl">
+        <TabsContent value="branches" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">{branches.filter((b) => b.status === "active").length} active branch(es)</p>
             {canEditSettings && (
@@ -396,7 +400,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Taxes */}
-        <TabsContent value="taxes" className="space-y-4 mt-4 max-w-2xl">
+        <TabsContent value="taxes" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -468,7 +472,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Receipt */}
-        <TabsContent value="receipt" className="mt-4">
+        <TabsContent value="receipt" className="mt-0 px-4 md:px-6 py-6">
           {(() => {
             // Mock sale for live preview — apply current tax rates to show realistic totals
             const previewItemsSubtotal = 125.50
@@ -605,7 +609,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         </TabsContent>
 
         {/* Billing */}
-        <TabsContent value="billing" className="space-y-4 mt-4 max-w-2xl">
+        <TabsContent value="billing" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Current Plan</CardTitle>
@@ -639,7 +643,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
           </Card>
         </TabsContent>
         {/* Security */}
-        <TabsContent value="security" className="space-y-4 mt-4 max-w-2xl">
+        <TabsContent value="security" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
