@@ -15,7 +15,24 @@ export default async function CreditPage() {
 
   const csQuery = supabase
     .from("credit_sales")
-    .select("*, customer:customers(id, name, phone), sale:sales(sale_date)")
+    .select(`
+      *,
+      customer:customers(id, name, phone),
+      sale:sales(
+        sale_date,
+        recorded_by_name,
+        sale_items(
+          id,
+          quantity_kg,
+          quantity_units,
+          quantity_boxes,
+          unit_price,
+          discount_amount,
+          line_total,
+          product:products(name, unit_type, units_per_box)
+        )
+      )
+    `)
     .eq("shop_id", session.shop_id!)
     .gt("balance", 0)
     .order("created_at", { ascending: false })

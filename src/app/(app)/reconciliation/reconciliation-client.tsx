@@ -148,13 +148,14 @@ export function ReconciliationClient({
         return
       }
 
-      // 2. Credit repayments (cash) for the date
+      // 2. Credit repayments (cash, received at shop) for the date
       const paymentsQ = supabase
         .from("credit_payments")
         .select("amount")
         .eq("shop_id", session.shop_id)
         .eq("payment_method", "cash")
         .eq("payment_date", date)
+        .eq("received_at_shop", true)
       if (branchId) paymentsQ.eq("branch_id", branchId)
       const { data: paymentsData } = await paymentsQ
       const totalCreditRepayments = (paymentsData ?? []).reduce((s, p) => s + p.amount, 0)

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatDate } from "@/utils/format";
 import { toast } from "sonner";
 import {
@@ -29,7 +30,6 @@ import {
   Wallet,
   Pencil,
   Trash2,
-  Plus,
   Loader2,
   CreditCard,
   TrendingDown,
@@ -37,14 +37,24 @@ import {
   ArrowDownLeft,
   ChevronDown,
   ShoppingCart,
-  Banknote,
-  Smartphone,
+  Store,
 } from "lucide-react";
 import type { SessionContext } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface SaleItem {
+  id: string;
+  quantity_kg: number;
+  quantity_units: number;
+  quantity_boxes: number;
+  unit_price: number;
+  discount_amount: number;
+  line_total: number;
+  product: { name: string; unit_type: string; units_per_box: number | null } | null;
+}
 
 interface CreditSaleRow {
   id: string;
@@ -57,7 +67,11 @@ interface CreditSaleRow {
   balance: number;
   created_at: string;
   customer: { id: string; name: string; phone: string | null } | null;
-  sale: { sale_date: string } | null;
+  sale: {
+    sale_date: string;
+    recorded_by_name: string | null;
+    sale_items: SaleItem[];
+  } | null;
 }
 
 interface CreditPayment {
@@ -68,6 +82,7 @@ interface CreditPayment {
   payment_date: string;
   notes: string | null;
   recorded_by: string | null;
+  received_at_shop: boolean;
 }
 
 interface Props {
@@ -88,7 +103,7 @@ interface CustomerGroup {
   branchId: string;
 }
 
-// ─── Ledger entry (merged sale + payment) ────────────────────────────────────
+// ─── Ledger entry ─────────────────────────────────────────────────────────────
 
 type LedgerEntry =
   | {
@@ -96,18 +111,22 @@ type LedgerEntry =
       id: string;
       date: string;
       debit: number;
-      balance: number; // running balance after this entry
+      balance: number;
       amountPaid: number;
+      description: string;
+      items: SaleItem[];
+      recordedByName: string | null;
     }
   | {
       kind: "payment";
       id: string;
       date: string;
       credit: number;
-      balance: number; // running balance after this entry
+      balance: number;
       method: string;
       notes: string | null;
       recordedBy: string | null;
+      receivedAtShop: boolean;
     };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -116,26 +135,28 @@ function todayIso(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function methodLabel(method: string) {
+function formatQty(item: SaleItem): string {
+  const parts: string[] = [];
+  if (item.quantity_boxes > 0) parts.push(`${item.quantity_boxes} box${item.quantity_boxes !== 1 ? "es" : ""}`);
+  if (item.quantity_kg > 0) parts.push(`${item.quantity_kg % 1 === 0 ? item.quantity_kg : item.quantity_kg.toFixed(2)} kg`);
+  if (item.quantity_units > 0) parts.push(`${item.quantity_units} unit${item.quantity_units !== 1 ? "s" : ""}`);
+  return parts.join(" + ") || "—";
+}
+
+function saleDescription(items: SaleItem[]): string {
+  const names = items
+    .map((i) => i.product?.name)
+    .filter(Boolean) as string[];
+  if (names.length === 0) return "Credit sale";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names.join(", ");
+  return `${names[0]}, +${names.length - 1} more`;
+}
+
+function methodLabel(method: string): string {
   if (method === "cash") return "Cash";
   if (method === "mobile_money") return "Mobile Money";
   return method;
-}
-
-function MethodBadge({ method }: { method: string }) {
-  if (method === "cash")
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
-        <Banknote className="size-3" />
-        Cash
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-600">
-      <Smartphone className="size-3" />
-      Mobile Money
-    </span>
-  );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -149,26 +170,43 @@ export function CreditClient({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
-  // ── Selection ────────────────────────────────────────────────────────────
+  // ── Selection + expand ────────────────────────────────────────────────────
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // ── Payment dialog ───────────────────────────────────────────────────────
+  // ── Record payment dialog ─────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<"cash" | "mobile_money">("cash");
   const [payDate, setPayDate] = useState(todayIso());
+  const [payNotes, setPayNotes] = useState("");
+  const [payReceivedAtShop, setPayReceivedAtShop] = useState(true);
   const [payLoading, setPayLoading] = useState(false);
 
-  // ── Edit / Delete dialogs ────────────────────────────────────────────────
-  const [editOpen, setEditOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
+  // ── Edit payment dialog ───────────────────────────────────────────────────
+  const [editPayment, setEditPayment] = useState<CreditPayment | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editMethod, setEditMethod] = useState<"cash" | "mobile_money">("cash");
+  const [editDate, setEditDate] = useState(todayIso());
+  const [editNotes, setEditNotes] = useState("");
+  const [editReceivedAtShop, setEditReceivedAtShop] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // ── Delete payment dialog ─────────────────────────────────────────────────
+  const [deletePayment, setDeletePayment] = useState<CreditPayment | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // ── Payment history ──────────────────────────────────────────────────────
+  // ── Edit customer dialog ──────────────────────────────────────────────────
+  const [editCustOpen, setEditCustOpen] = useState(false);
+  const [editCustName, setEditCustName] = useState("");
+  const [editCustPhone, setEditCustPhone] = useState("");
+  const [editCustLoading, setEditCustLoading] = useState(false);
+
+  // ── Delete customer dialog ────────────────────────────────────────────────
+  const [deleteCustOpen, setDeleteCustOpen] = useState(false);
+  const [deleteCustLoading, setDeleteCustLoading] = useState(false);
+
+  // ── Payment history ───────────────────────────────────────────────────────
   const [payments, setPayments] = useState<CreditPayment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
 
@@ -207,7 +245,6 @@ export function CreditClient({
   const ledger = useMemo<LedgerEntry[]>(() => {
     if (!selectedGroup) return [];
 
-    // Merge sales + payments into one list with a sort key
     const raw: ({ sortDate: string } & (
       | { kind: "sale"; row: CreditSaleRow }
       | { kind: "payment"; row: CreditPayment }
@@ -226,7 +263,6 @@ export function CreditClient({
 
     raw.sort((a, b) => a.sortDate.localeCompare(b.sortDate));
 
-    // Compute running balance
     let running = 0;
     return raw.map(({ kind, sortDate, row }) => {
       if (kind === "sale") {
@@ -239,6 +275,9 @@ export function CreditClient({
           debit: s.amount_owed,
           balance: running,
           amountPaid: s.amount_paid,
+          description: saleDescription(s.sale?.sale_items ?? []),
+          items: s.sale?.sale_items ?? [],
+          recordedByName: s.sale?.recorded_by_name ?? null,
         } satisfies LedgerEntry;
       } else {
         const p = row as CreditPayment;
@@ -252,15 +291,14 @@ export function CreditClient({
           method: p.payment_method,
           notes: p.notes,
           recordedBy: p.recorded_by,
+          receivedAtShop: p.received_at_shop,
         } satisfies LedgerEntry;
       }
     });
   }, [selectedGroup, payments]);
 
-  // Reverse for display (newest first)
   const ledgerDesc = useMemo(() => [...ledger].reverse(), [ledger]);
 
-  // Ledger pagination
   const {
     paginatedData: ledgerPage,
     page: ledgerCurrentPage,
@@ -281,7 +319,7 @@ export function CreditClient({
         .from("credit_payments")
         .select("*")
         .eq("customer_id", customerId)
-        .order("payment_date", { ascending: false });
+        .order("payment_date", { ascending: true });
       if (error) toast.error("Failed to load payment history");
       else setPayments((data as CreditPayment[]) ?? []);
       setPaymentsLoading(false);
@@ -298,8 +336,54 @@ export function CreditClient({
     }
   }, [selectedCustomerId, loadPayments]);
 
+  // ─── Recalculate all credit_sale balances for current customer ────────────
+  // Called after any payment is added, edited, or deleted to keep balances accurate.
+  async function recalculateBalances(excludePaymentId?: string) {
+    if (!selectedGroup) return;
+
+    const sortedSales = [...selectedGroup.sales].sort((a, b) => {
+      const da = a.sale?.sale_date ?? a.created_at.slice(0, 10);
+      const db = b.sale?.sale_date ?? b.created_at.slice(0, 10);
+      return da.localeCompare(db);
+    });
+
+    let paymentsQ = supabase
+      .from("credit_payments")
+      .select("amount, payment_date")
+      .eq("customer_id", selectedGroup.customerId)
+      .order("payment_date", { ascending: true });
+    if (excludePaymentId) paymentsQ = paymentsQ.neq("id", excludePaymentId);
+    const { data: remainingPayments } = await paymentsQ;
+
+    const states = sortedSales.map((s) => ({
+      id: s.id,
+      amount_owed: s.amount_owed,
+      amount_paid: 0,
+      balance: s.amount_owed,
+    }));
+
+    for (const payment of remainingPayments ?? []) {
+      let remaining = payment.amount;
+      for (const state of states) {
+        if (remaining <= 0) break;
+        if (state.balance <= 0) continue;
+        const deduct = Math.min(remaining, state.balance);
+        state.amount_paid += deduct;
+        state.balance -= deduct;
+        remaining -= deduct;
+      }
+    }
+
+    for (const state of states) {
+      await supabase
+        .from("credit_sales")
+        .update({ amount_paid: state.amount_paid, balance: state.balance })
+        .eq("id", state.id);
+    }
+  }
+
   // ─── Overdue check ────────────────────────────────────────────────────────
-  function isOverdue(group: CustomerGroup) {
+  function isOverdue(group: CustomerGroup): boolean {
     const oldest = group.sales.reduce<string | null>((min, s) => {
       const d = s.sale?.sale_date ?? s.created_at.slice(0, 10);
       return !min || d < min ? d : min;
@@ -329,7 +413,9 @@ export function CreditClient({
         amount,
         payment_method: payMethod,
         payment_date: payDate,
+        notes: payNotes.trim() || null,
         recorded_by: session.user_id,
+        received_at_shop: payReceivedAtShop,
       })
       .select()
       .single();
@@ -344,53 +430,97 @@ export function CreditClient({
       newValues: { amount, payment_method: payMethod, customer_id: selectedGroup.customerId },
     });
 
-    let remaining = amount;
-    const sorted = [...selectedGroup.sales].sort(
-      (a, b) =>
-        new Date(a.sale?.sale_date ?? a.created_at).getTime() -
-        new Date(b.sale?.sale_date ?? b.created_at).getTime(),
-    );
-    for (const sale of sorted) {
-      if (remaining <= 0) break;
-      if (sale.balance <= 0) continue;
-      const deduct = Math.min(remaining, sale.balance);
-      await supabase
-        .from("credit_sales")
-        .update({ amount_paid: sale.amount_paid + deduct, balance: sale.balance - deduct })
-        .eq("id", sale.id);
-      remaining -= deduct;
-    }
+    await recalculateBalances();
 
     toast.success("Payment recorded");
     setPayOpen(false);
     setPayAmount("");
+    setPayNotes("");
+    setPayReceivedAtShop(true);
     setPayDate(todayIso());
     setPayLoading(false);
+    await loadPayments(selectedGroup.customerId);
+    router.refresh();
+  }
+
+  // ─── Edit payment ─────────────────────────────────────────────────────────
+  function openEditPayment(p: CreditPayment) {
+    setEditPayment(p);
+    setEditAmount(String(p.amount));
+    setEditMethod(p.payment_method as "cash" | "mobile_money");
+    setEditDate(p.payment_date);
+    setEditNotes(p.notes ?? "");
+    setEditReceivedAtShop(p.received_at_shop);
+  }
+
+  async function handleEditPayment() {
+    if (!editPayment || !selectedGroup) return;
+    const amount = parseFloat(editAmount);
+    if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
+
+    setEditLoading(true);
+    const { error } = await supabase
+      .from("credit_payments")
+      .update({
+        amount,
+        payment_method: editMethod,
+        payment_date: editDate,
+        notes: editNotes.trim() || null,
+        received_at_shop: editReceivedAtShop,
+      })
+      .eq("id", editPayment.id);
+
+    if (error) { toast.error(error.message); setEditLoading(false); return; }
+
+    await recalculateBalances();
+
+    toast.success("Payment updated");
+    setEditPayment(null);
+    setEditLoading(false);
+    await loadPayments(selectedGroup.customerId);
+    router.refresh();
+  }
+
+  // ─── Delete payment ───────────────────────────────────────────────────────
+  async function handleDeletePayment() {
+    if (!deletePayment || !selectedGroup) return;
+    setDeleteLoading(true);
+
+    const { error } = await supabase
+      .from("credit_payments")
+      .delete()
+      .eq("id", deletePayment.id);
+
+    if (error) { toast.error(error.message); setDeleteLoading(false); return; }
+
+    await recalculateBalances(deletePayment.id);
+
+    toast.success("Payment deleted");
+    setDeletePayment(null);
+    setDeleteLoading(false);
+    await loadPayments(selectedGroup.customerId);
     router.refresh();
   }
 
   // ─── Edit customer ────────────────────────────────────────────────────────
-  function openEditDialog() {
+  function openEditCustomer() {
     if (!selectedGroup) return;
-    setEditName(selectedGroup.name);
-    setEditPhone(selectedGroup.phone ?? "");
-    setEditOpen(true);
+    setEditCustName(selectedGroup.name);
+    setEditCustPhone(selectedGroup.phone ?? "");
+    setEditCustOpen(true);
   }
 
   async function handleEditCustomer() {
-    if (!selectedGroup || !editName.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    setEditLoading(true);
+    if (!selectedGroup || !editCustName.trim()) { toast.error("Name is required"); return; }
+    setEditCustLoading(true);
     const { error } = await supabase
       .from("customers")
-      .update({ name: editName.trim(), phone: editPhone.trim() || null })
+      .update({ name: editCustName.trim(), phone: editCustPhone.trim() || null })
       .eq("id", selectedGroup.customerId);
-    if (error) { toast.error(error.message); setEditLoading(false); return; }
+    if (error) { toast.error(error.message); setEditCustLoading(false); return; }
     toast.success("Customer updated");
-    setEditOpen(false);
-    setEditLoading(false);
+    setEditCustOpen(false);
+    setEditCustLoading(false);
     router.refresh();
   }
 
@@ -399,19 +529,19 @@ export function CreditClient({
     if (!selectedGroup) return;
     if (selectedGroup.sales.length > 0) {
       toast.error("Cannot delete customer with credit history");
-      setDeleteOpen(false);
+      setDeleteCustOpen(false);
       return;
     }
-    setDeleteLoading(true);
+    setDeleteCustLoading(true);
     const { error } = await supabase
       .from("customers")
       .delete()
       .eq("id", selectedGroup.customerId);
-    if (error) { toast.error(error.message); setDeleteLoading(false); return; }
+    if (error) { toast.error(error.message); setDeleteCustLoading(false); return; }
     toast.success("Customer deleted");
-    setDeleteOpen(false);
+    setDeleteCustOpen(false);
     setSelectedCustomerId(null);
-    setDeleteLoading(false);
+    setDeleteCustLoading(false);
     router.refresh();
   }
 
@@ -419,12 +549,11 @@ export function CreditClient({
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
 
-      {/* ── Left panel: customer list ── */}
+      {/* ── Left panel ── */}
       <div className="w-72 shrink-0 border-r flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 className="font-semibold text-sm">Customers</h2>
         </div>
-
         <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
           {customerGroups.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-xs text-center px-4">
@@ -440,19 +569,12 @@ export function CreditClient({
                   key={group.customerId}
                   onClick={() => setSelectedCustomerId(group.customerId)}
                   className={`border rounded-lg p-3 w-full text-left transition-colors ${
-                    isActive
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-background hover:bg-muted/50"
+                    isActive ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-muted/50"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium text-sm leading-tight line-clamp-1">
-                      {group.name}
-                    </span>
-                    <Badge
-                      variant="destructive"
-                      className="shrink-0 tabular-nums"
-                    >
+                    <span className="font-medium text-sm leading-tight line-clamp-1">{group.name}</span>
+                    <Badge variant="destructive" className="shrink-0 tabular-nums">
                       {formatCurrency(group.outstanding, currency)}
                     </Badge>
                   </div>
@@ -463,11 +585,7 @@ export function CreditClient({
                         <span>{group.phone}</span>
                       </div>
                     ) : <span />}
-                    {overdue && (
-                      <span className="text-xs font-medium text-red-600">
-                        Overdue
-                      </span>
-                    )}
+                    {overdue && <span className="text-xs font-medium text-red-600">Overdue</span>}
                   </div>
                 </button>
               );
@@ -485,7 +603,7 @@ export function CreditClient({
           </div>
         ) : (
           <>
-            {/* Sticky header */}
+            {/* Header */}
             <div className="border-b px-6 py-4 shrink-0 bg-background">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -493,92 +611,62 @@ export function CreditClient({
                     <User className="size-5 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="font-semibold text-base leading-tight truncate">
-                      {selectedGroup.name}
-                    </h2>
+                    <h2 className="font-semibold text-base leading-tight truncate">{selectedGroup.name}</h2>
                     {selectedGroup.phone && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <Phone className="size-3" />
-                        {selectedGroup.phone}
+                        <Phone className="size-3" />{selectedGroup.phone}
                       </p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button size="sm" variant="ghost" onClick={openEditDialog} aria-label="Edit">
+                  <Button size="sm" variant="ghost" onClick={openEditCustomer} aria-label="Edit customer">
                     <Pencil className="size-3.5" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDeleteOpen(true)}
-                    className="text-destructive hover:text-destructive"
-                    aria-label="Delete"
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteCustOpen(true)}
+                    className="text-destructive hover:text-destructive" aria-label="Delete customer">
                     <Trash2 className="size-3.5" />
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setPayAmount("");
-                      setPayDate(todayIso());
-                      setPayMethod("cash");
-                      setPayOpen(true);
-                    }}
-                  >
+                  <Button size="sm" onClick={() => {
+                    setPayAmount(""); setPayDate(todayIso());
+                    setPayMethod("cash"); setPayNotes(""); setPayReceivedAtShop(true);
+                    setPayOpen(true);
+                  }}>
                     <Wallet className="size-3.5 mr-1.5" />
                     Record Payment
                   </Button>
                 </div>
               </div>
 
-              {/* Summary stats */}
+              {/* Stats */}
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <TrendingDown className="size-3.5 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground">Total Credit</p>
                   </div>
-                  <p className="font-bold text-sm tabular-nums">
-                    {formatCurrency(selectedGroup.totalOwed, currency)}
-                  </p>
+                  <p className="font-bold text-sm tabular-nums">{formatCurrency(selectedGroup.totalOwed, currency)}</p>
                 </div>
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <CheckCircle2 className="size-3.5 text-green-600" />
                     <p className="text-xs text-muted-foreground">Total Paid</p>
                   </div>
-                  <p className="font-bold text-sm text-green-700 tabular-nums">
-                    {formatCurrency(selectedGroup.totalPaid, currency)}
-                  </p>
+                  <p className="font-bold text-sm text-green-700 tabular-nums">{formatCurrency(selectedGroup.totalPaid, currency)}</p>
                 </div>
-                <div
-                  className={`rounded-lg border px-4 py-3 ${
-                    selectedGroup.outstanding > 0
-                      ? "bg-red-50 border-red-200"
-                      : "bg-green-50 border-green-200"
-                  }`}
-                >
+                <div className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
                   <div className="flex items-center gap-1.5 mb-1">
-                    <ArrowDownLeft
-                      className={`size-3.5 ${
-                        selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"
-                      }`}
-                    />
+                    <ArrowDownLeft className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`} />
                     <p className="text-xs text-muted-foreground">Outstanding</p>
                   </div>
-                  <p
-                    className={`font-bold text-sm tabular-nums ${
-                      selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"
-                    }`}
-                  >
+                  <p className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
                     {formatCurrency(selectedGroup.outstanding, currency)}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* ── Ledger ── */}
+            {/* ── Transaction History ── */}
             <div className="flex-1 overflow-y-auto">
               {paymentsLoading ? (
                 <div className="flex items-center justify-center h-40 gap-2 text-muted-foreground">
@@ -592,15 +680,20 @@ export function CreditClient({
                 </div>
               ) : (
                 <>
+                  {/* Section title */}
+                  <div className="px-6 py-3 border-b">
+                    <h3 className="text-sm font-semibold">Transaction History</h3>
+                  </div>
+
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-background border-b z-10">
                       <tr className="text-xs text-muted-foreground">
-                        <th className="px-5 py-3 text-left font-medium w-8" />
-                        <th className="px-3 py-3 text-left font-medium">Date</th>
+                        <th className="px-5 py-3 text-left font-medium">Date</th>
                         <th className="px-3 py-3 text-left font-medium">Type</th>
-                        <th className="px-3 py-3 text-right font-medium text-red-600">Debit</th>
-                        <th className="px-3 py-3 text-right font-medium text-green-600">Credit</th>
+                        <th className="px-3 py-3 text-left font-medium">Description</th>
+                        <th className="px-3 py-3 text-right font-medium">Amount</th>
                         <th className="px-5 py-3 text-right font-medium">Balance</th>
+                        <th className="w-20" />
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -608,121 +701,139 @@ export function CreditClient({
                         const isExpanded = expandedId === entry.id;
                         return (
                           <>
-                            {/* Main row */}
+                            {/* ── Main row ── */}
                             <tr
                               key={entry.id}
                               onClick={() =>
-                                setExpandedId(isExpanded ? null : entry.id)
+                                entry.kind === "sale"
+                                  ? setExpandedId(isExpanded ? null : entry.id)
+                                  : undefined
                               }
-                              className="hover:bg-muted/40 cursor-pointer transition-colors"
+                              className={`transition-colors ${
+                                entry.kind === "sale"
+                                  ? "hover:bg-muted/40 cursor-pointer"
+                                  : "hover:bg-muted/20"
+                              }`}
                             >
-                              {/* Chevron */}
-                              <td className="px-5 py-3 text-muted-foreground">
-                                <ChevronDown
-                                  className={`size-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                                />
-                              </td>
-
                               {/* Date */}
-                              <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                              <td className="px-5 py-3 whitespace-nowrap text-muted-foreground text-xs">
                                 {formatDate(entry.date)}
                               </td>
 
                               {/* Type badge */}
                               <td className="px-3 py-3">
                                 {entry.kind === "sale" ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600">
-                                    <ShoppingCart className="size-3" />
+                                  <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium bg-background text-foreground">
+                                    <ShoppingCart className="size-3 text-muted-foreground" />
                                     Sale
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                                     <CheckCircle2 className="size-3" />
                                     Payment
                                   </span>
                                 )}
                               </td>
 
-                              {/* Debit */}
-                              <td className="px-3 py-3 text-right tabular-nums">
-                                {entry.kind === "sale" ? (
-                                  <span className="font-medium text-red-600">
-                                    {formatCurrency(entry.debit, currency)}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground/40">—</span>
-                                )}
+                              {/* Description */}
+                              <td className="px-3 py-3 text-sm">
+                                {entry.kind === "sale"
+                                  ? entry.description
+                                  : methodLabel(entry.method)}
                               </td>
 
-                              {/* Credit */}
-                              <td className="px-3 py-3 text-right tabular-nums">
-                                {entry.kind === "payment" ? (
-                                  <span className="font-medium text-green-700">
-                                    {formatCurrency(entry.credit, currency)}
-                                  </span>
+                              {/* Amount */}
+                              <td className="px-3 py-3 text-right tabular-nums font-medium">
+                                {entry.kind === "sale" ? (
+                                  <span className="text-red-600">{formatCurrency(entry.debit, currency)}</span>
                                 ) : (
-                                  <span className="text-muted-foreground/40">—</span>
+                                  <span className="text-green-700">{formatCurrency(entry.credit, currency)}</span>
                                 )}
                               </td>
 
                               {/* Running balance */}
                               <td className="px-5 py-3 text-right tabular-nums">
-                                <span
-                                  className={`font-semibold ${
-                                    entry.balance > 0
-                                      ? "text-red-600"
-                                      : "text-green-700"
-                                  }`}
-                                >
+                                <span className={`font-semibold ${entry.balance > 0 ? "text-red-600" : "text-green-700"}`}>
                                   {formatCurrency(entry.balance, currency)}
                                 </span>
                               </td>
+
+                              {/* Actions column */}
+                              <td className="pr-4 py-3">
+                                {entry.kind === "sale" ? (
+                                  <ChevronDown
+                                    className={`size-4 text-muted-foreground ml-auto transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                  />
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const p = payments.find((p) => p.id === entry.id);
+                                        if (p) openEditPayment(p);
+                                      }}
+                                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                      aria-label="Edit payment"
+                                    >
+                                      <Pencil className="size-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const p = payments.find((p) => p.id === entry.id);
+                                        if (p) setDeletePayment(p);
+                                      }}
+                                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                      aria-label="Delete payment"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
                             </tr>
 
-                            {/* Expanded detail row */}
-                            {isExpanded && (
-                              <tr key={`${entry.id}-detail`} className="bg-muted/20">
-                                <td colSpan={6} className="px-5 py-4">
-                                  {entry.kind === "sale" ? (
-                                    <div className="flex items-start gap-6 text-sm">
-                                      <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Amount charged</p>
-                                        <p className="font-semibold text-red-600 tabular-nums">
-                                          {formatCurrency(entry.debit, currency)}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Paid off</p>
-                                        <p className="font-semibold text-green-700 tabular-nums">
-                                          {formatCurrency(entry.amountPaid, currency)}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Remaining on this sale</p>
-                                        <p className="font-semibold tabular-nums">
-                                          {formatCurrency(entry.debit - entry.amountPaid, currency)}
-                                        </p>
-                                      </div>
-                                    </div>
+                            {/* ── Expanded sale detail ── */}
+                            {entry.kind === "sale" && isExpanded && (
+                              <tr key={`${entry.id}-detail`}>
+                                <td colSpan={6} className="bg-muted/30 px-8 py-4 border-b">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                                    Items in this sale
+                                  </p>
+                                  {entry.items.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">No item details available</p>
                                   ) : (
-                                    <div className="flex items-start gap-6 text-sm flex-wrap">
-                                      <div>
-                                        <p className="text-xs text-muted-foreground mb-1">Method</p>
-                                        <MethodBadge method={entry.method} />
-                                      </div>
-                                      {entry.recordedBy && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-0.5">Recorded by</p>
-                                          <p className="text-sm">{entry.recordedBy}</p>
-                                        </div>
-                                      )}
-                                      {entry.notes && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-0.5">Notes</p>
-                                          <p className="text-sm text-muted-foreground">{entry.notes}</p>
-                                        </div>
-                                      )}
-                                    </div>
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-muted-foreground border-b">
+                                          <th className="text-left pb-2 font-medium">Product</th>
+                                          <th className="text-left pb-2 font-medium">Qty</th>
+                                          <th className="text-right pb-2 font-medium">Unit Price</th>
+                                          <th className="text-right pb-2 font-medium">Discount</th>
+                                          <th className="text-right pb-2 font-medium">Line Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-border/50">
+                                        {entry.items.map((item) => (
+                                          <tr key={item.id}>
+                                            <td className="py-2 font-medium pr-4">{item.product?.name ?? "—"}</td>
+                                            <td className="py-2 text-muted-foreground">{formatQty(item)}</td>
+                                            <td className="py-2 text-right tabular-nums">{formatCurrency(item.unit_price, currency)}</td>
+                                            <td className="py-2 text-right tabular-nums text-muted-foreground">
+                                              {item.discount_amount > 0
+                                                ? formatCurrency(item.discount_amount, currency)
+                                                : "—"}
+                                            </td>
+                                            <td className="py-2 text-right tabular-nums font-semibold">{formatCurrency(item.line_total, currency)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  {entry.recordedByName && (
+                                    <p className="text-xs text-muted-foreground mt-3">
+                                      Recorded by {entry.recordedByName}
+                                    </p>
                                   )}
                                 </td>
                               </tr>
@@ -754,40 +865,26 @@ export function CreditClient({
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
+            <DialogTitle>Record Payment — {selectedGroup?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
             {selectedGroup && (
               <p className="text-sm text-muted-foreground">
                 Outstanding:{" "}
-                <span className="font-medium text-foreground">
+                <span className="font-semibold text-foreground">
                   {formatCurrency(selectedGroup.outstanding, currency)}
                 </span>
               </p>
             )}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-amount">Amount</Label>
-              <Input
-                id="pay-amount"
-                type="number"
-                min={0}
-                step="any"
-                required
-                autoFocus
-                placeholder="0.00"
-                value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
-              />
+              <Label htmlFor="pay-amount">Amount ({currency})</Label>
+              <Input id="pay-amount" type="number" min={0} step="any" required autoFocus
+                placeholder="0.00" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pay-method">Payment Method</Label>
-              <Select
-                value={payMethod}
-                onValueChange={(v) => setPayMethod(v as "cash" | "mobile_money")}
-              >
-                <SelectTrigger id="pay-method" className="w-full">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
+              <Select value={payMethod} onValueChange={(v) => setPayMethod(v as "cash" | "mobile_money")}>
+                <SelectTrigger id="pay-method" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="mobile_money">Mobile Money</SelectItem>
@@ -796,78 +893,164 @@ export function CreditClient({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pay-date">Date</Label>
-              <Input
-                id="pay-date"
-                type="date"
-                value={payDate}
-                onChange={(e) => setPayDate(e.target.value)}
-              />
+              <Input id="pay-date" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
             </div>
-            <Button className="w-full" onClick={handleRecordPayment} disabled={payLoading}>
-              {payLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
-              Record Payment
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-notes">Notes (optional)</Label>
+              <Textarea id="pay-notes" placeholder="Any notes…" rows={2}
+                value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
+            </div>
+            {/* Received at shop */}
+            <label className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${payReceivedAtShop ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+              <input
+                type="checkbox"
+                className="mt-0.5 w-4 h-4 rounded accent-primary cursor-pointer"
+                checked={payReceivedAtShop}
+                onChange={(e) => setPayReceivedAtShop(e.target.checked)}
+              />
+              <div>
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <Store className="size-3.5" />
+                  Received at shop
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tick this if the cash is physically in the till. This will include it in daily reconciliation.
+                </p>
+              </div>
+            </label>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setPayOpen(false)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleRecordPayment} disabled={payLoading}>
+                {payLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Record Payment
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Payment Dialog ── */}
+      <Dialog open={!!editPayment} onOpenChange={(o) => { if (!o) setEditPayment(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Payment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-pay-amount">Amount ({currency})</Label>
+              <Input id="edit-pay-amount" type="number" min={0} step="any" required autoFocus
+                placeholder="0.00" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-pay-method">Payment Method</Label>
+              <Select value={editMethod} onValueChange={(v) => setEditMethod(v as "cash" | "mobile_money")}>
+                <SelectTrigger id="edit-pay-method" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-pay-date">Date</Label>
+              <Input id="edit-pay-date" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-pay-notes">Notes (optional)</Label>
+              <Textarea id="edit-pay-notes" placeholder="Any notes…" rows={2}
+                value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+            </div>
+            <label className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${editReceivedAtShop ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+              <input
+                type="checkbox"
+                className="mt-0.5 w-4 h-4 rounded accent-primary cursor-pointer"
+                checked={editReceivedAtShop}
+                onChange={(e) => setEditReceivedAtShop(e.target.checked)}
+              />
+              <div>
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <Store className="size-3.5" />
+                  Received at shop
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tick this if the cash is physically in the till. This will include it in daily reconciliation.
+                </p>
+              </div>
+            </label>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setEditPayment(null)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleEditPayment} disabled={editLoading}>
+                {editLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Payment Dialog ── */}
+      <Dialog open={!!deletePayment} onOpenChange={(o) => { if (!o) setDeletePayment(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Payment?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently remove the{" "}
+            <span className="font-medium text-foreground">
+              {deletePayment ? formatCurrency(deletePayment.amount, currency) : ""} payment
+            </span>{" "}
+            and recalculate the outstanding balance. This cannot be undone.
+          </p>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeletePayment(null)} disabled={deleteLoading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" className="flex-1" onClick={handleDeletePayment} disabled={deleteLoading}>
+              {deleteLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Delete
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* ── Edit Customer Dialog ── */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editCustOpen} onOpenChange={setEditCustOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Edit Customer</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Customer</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Full Name</Label>
-              <Input
-                id="edit-name"
-                required
-                autoFocus
-                placeholder="Customer name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
+              <Label htmlFor="edit-cust-name">Full Name</Label>
+              <Input id="edit-cust-name" required autoFocus placeholder="Customer name"
+                value={editCustName} onChange={(e) => setEditCustName(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-phone">Phone Number (optional)</Label>
-              <Input
-                id="edit-phone"
-                type="tel"
-                placeholder="+1 555 000 0000"
-                value={editPhone}
-                onChange={(e) => setEditPhone(e.target.value)}
-              />
+              <Label htmlFor="edit-cust-phone">Phone Number (optional)</Label>
+              <Input id="edit-cust-phone" type="tel" placeholder="+1 555 000 0000"
+                value={editCustPhone} onChange={(e) => setEditCustPhone(e.target.value)} />
             </div>
-            <Button className="w-full" onClick={handleEditCustomer} disabled={editLoading}>
-              {editLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+            <Button className="w-full" onClick={handleEditCustomer} disabled={editCustLoading}>
+              {editCustLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
               Save Changes
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Confirmation Dialog ── */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      {/* ── Delete Customer Dialog ── */}
+      <Dialog open={deleteCustOpen} onOpenChange={setDeleteCustOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Customer</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-1">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete{" "}
-              <span className="font-medium text-foreground">{selectedGroup?.name}</span>?
-              This action cannot be undone.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteLoading}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteCustomer} disabled={deleteLoading}>
-                {deleteLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
-                Delete
-              </Button>
-            </div>
+          <DialogHeader><DialogTitle>Delete Customer</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete{" "}
+            <span className="font-medium text-foreground">{selectedGroup?.name}</span>?
+            This action cannot be undone.
+          </p>
+          <div className="flex gap-2 pt-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteCustOpen(false)} disabled={deleteCustLoading}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteCustomer} disabled={deleteCustLoading}>
+              {deleteCustLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
