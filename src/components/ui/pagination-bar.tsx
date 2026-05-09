@@ -97,7 +97,7 @@ export function PaginationBar({
 
   return (
     <div
-      className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t text-sm ${className}`}
+      className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t text-sm w-full ${className}`}
     >
       {/* ── Left: summary + page-size selector ─────────────────────────────── */}
       <div className="flex items-center gap-3 text-muted-foreground">
