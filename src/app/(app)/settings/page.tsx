@@ -21,6 +21,18 @@ export default async function SettingsPage() {
     .eq("is_active", true)
     .order("price_monthly")
 
+  // Role permissions (owner-configurable)
+  const { data: rolePermissionsRows } = await supabase
+    .from("shop_role_permissions")
+    .select("role, permissions")
+    .eq("shop_id", session.shop_id!)
+
+  // Index by role name for easy lookup
+  const rolePermissions: Record<string, Record<string, boolean>> = {}
+  for (const row of rolePermissionsRows ?? []) {
+    rolePermissions[row.role] = (row.permissions as Record<string, boolean>) ?? {}
+  }
+
   // Plan usage
   const [
     { count: userCount },
@@ -42,6 +54,7 @@ export default async function SettingsPage() {
       allPlans={(allPlans ?? []) as unknown as Parameters<typeof SettingsClient>[0]["allPlans"]}
       usage={{ users: userCount ?? 0, branches: branchCount ?? 0, products: productCount ?? 0, customers: customerCount ?? 0 }}
       session={session}
+      rolePermissions={rolePermissions}
     />
   )
 }

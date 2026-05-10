@@ -357,6 +357,7 @@ export interface SessionContext {
   branch_id: string | null
   role: Role | null
   is_super_admin: boolean
+  member_id: string | null
 }
 
 // ─── UI / helper types ───────────────────────────────────────────────────────

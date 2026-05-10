@@ -26,12 +26,13 @@ export async function getSessionContext(): Promise<SessionContext | null> {
       branch_id: null,
       role: "super_admin",
       is_super_admin: true,
+      member_id: null,
     }
   }
 
   const { data: member } = await supabase
     .from("shop_members")
-    .select("shop_id, branch_id, role")
+    .select("id, shop_id, branch_id, role")
     .eq("user_id", user.id)
     .eq("status", "active")
     .single()
@@ -47,6 +48,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
       branch_id: null,
       role: null,
       is_super_admin: false,
+      member_id: null,
     }
   }
 
@@ -57,6 +59,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
     branch_id: member.branch_id,
     role: member.role as Role,
     is_super_admin: false,
+    member_id: member.id,
   }
 }
 

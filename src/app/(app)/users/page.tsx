@@ -43,12 +43,37 @@ export default async function UsersPage() {
     .eq("shop_id", session.shop_id!)
     .eq("status", "active")
 
+  // Role customisations (needed in member permissions panel to show role-level effective state)
+  const { data: rolePermissionsRows } = await supabase
+    .from("shop_role_permissions")
+    .select("role, permissions")
+    .eq("shop_id", session.shop_id!)
+
+  const rolePermissions: Record<string, Record<string, boolean>> = {}
+  for (const row of rolePermissionsRows ?? []) {
+    rolePermissions[row.role] = (row.permissions as Record<string, boolean>) ?? {}
+  }
+
+  // Per-member permission overrides (indexed by member_id)
+  const { data: overrideRows } = await supabase
+    .from("member_permission_overrides")
+    .select("member_id, permission, granted")
+    .eq("shop_id", session.shop_id!)
+
+  const memberOverrides: Record<string, Array<{ permission: string; granted: boolean }>> = {}
+  for (const row of overrideRows ?? []) {
+    if (!memberOverrides[row.member_id]) memberOverrides[row.member_id] = []
+    memberOverrides[row.member_id].push({ permission: row.permission, granted: row.granted })
+  }
+
   return (
     <UsersClient
       members={membersWithNames}
       invites={invites ?? []}
       branches={branches ?? []}
       session={session}
+      rolePermissions={rolePermissions}
+      memberOverrides={memberOverrides}
     />
   )
 }

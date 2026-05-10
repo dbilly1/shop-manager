@@ -20,6 +20,7 @@ import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt, Percent, X }
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
 import { ReceiptPreview, type ReceiptConfig, type ReceiptSaleData } from "@/components/receipt/receipt-preview"
+import { RolesTab } from "./roles-tab"
 
 interface PlanOption {
   id: string
@@ -39,11 +40,12 @@ interface Props {
   allPlans: PlanOption[]
   usage: { users: number; branches: number; products: number; customers: number }
   session: SessionContext
+  rolePermissions: Record<string, Record<string, boolean>>
 }
 
 const isOwner = (session: SessionContext) => session.role === "owner"
 
-export function SettingsClient({ shop, branches, subscription, allPlans, usage, session }: Props) {
+export function SettingsClient({ shop, branches, subscription, allPlans, usage, session, rolePermissions }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("general")
   const [saving, setSaving] = useState(false)
@@ -263,7 +265,7 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         {/* ── Sticky tab bar ── */}
         <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b border-border">
           <div className="flex gap-1 px-4 md:px-6">
-            {(["general", "branches", "taxes", "receipt", "billing", "security"] as const).map((tab) => (
+            {(["general", "branches", "roles", "taxes", "receipt", "billing", "security"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -405,6 +407,15 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Roles */}
+        <TabsContent value="roles" className="mt-0 px-4 md:px-6 py-6">
+          {canEditSettings ? (
+            <RolesTab savedPermissions={rolePermissions} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Only the shop owner can configure role permissions.</p>
+          )}
         </TabsContent>
 
         {/* Taxes */}

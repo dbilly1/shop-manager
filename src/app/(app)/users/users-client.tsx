@@ -19,11 +19,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatRole, formatDate } from "@/utils/format";
-import { UserPlus, Loader2, RefreshCw, XCircle, Copy, Check, Link2, Shuffle, UserMinus } from "lucide-react";
+import { UserPlus, Loader2, RefreshCw, XCircle, Copy, Check, Link2, Shuffle, UserMinus, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionContext, Role } from "@/types";
+import {
+  PERMISSION_DEFS,
+  BASE_ROLE_DEFAULTS,
+  type PermissionKey,
+  type PermissionGroup,
+} from "@/lib/permission-definitions";
 
 const INVITABLE_ROLES: {
   value: Role;
@@ -69,9 +76,13 @@ interface Props {
   invites: Invite[];
   branches: { id: string; name: string }[];
   session: SessionContext;
+  rolePermissions: Record<string, Record<string, boolean>>;
+  memberOverrides: Record<string, Array<{ permission: string; granted: boolean }>>;
 }
 
-export function UsersClient({ members, invites, branches, session }: Props) {
+const GROUPS = [...new Set(PERMISSION_DEFS.map((d) => d.group))] as PermissionGroup[];
+
+export function UsersClient({ members, invites, branches, session, rolePermissions, memberOverrides }: Props) {
   const router = useRouter();
   const [localMembers, setLocalMembers] = useState<Member[]>(members);
   const [localInvites, setLocalInvites] = useState<Invite[]>(invites);
@@ -89,6 +100,91 @@ export function UsersClient({ members, invites, branches, session }: Props) {
   const [resendLink, setResendLink] = useState<string | null>(null);
   const [resendEmail, setResendEmail] = useState<string | null>(null);
   const [resendCopied, setResendCopied] = useState(false);
+
+  // ── Member permissions panel ─────────────────────────────────────────────
+  const [permissionsFor, setPermissionsFor] = useState<Member | null>(null);
+  const [permState, setPermState] = useState<Record<PermissionKey, boolean>>({} as Record<PermissionKey, boolean>);
+  const [savingPerms, setSavingPerms] = useState(false);
+  // Local mirror so changes persist when re-opening without a full refresh
+  const [localOverrides, setLocalOverrides] = useState(memberOverrides);
+
+  /**
+   * Compute effective permissions for a member:
+   *   base defaults → role customisations → member overrides
+   */
+  function getEffective(member: Member): Record<PermissionKey, boolean> {
+    const role = member.role as string;
+    const base = BASE_ROLE_DEFAULTS[role] ?? ({} as Record<PermissionKey, boolean>);
+    const roleCustom = rolePermissions[role] ?? {};
+    const overrides = localOverrides[member.id] ?? [];
+
+    const merged: Record<PermissionKey, boolean> = { ...base };
+    for (const [k, v] of Object.entries(roleCustom) as [PermissionKey, boolean][]) {
+      if (k in base) merged[k] = v;
+    }
+    for (const { permission, granted } of overrides) {
+      if (permission in base) merged[permission as PermissionKey] = granted;
+    }
+    return merged;
+  }
+
+  /** Role-level effective (no member overrides) — used to detect member diffs */
+  function getRoleEffective(member: Member): Record<PermissionKey, boolean> {
+    const role = member.role as string;
+    const base = BASE_ROLE_DEFAULTS[role] ?? ({} as Record<PermissionKey, boolean>);
+    const roleCustom = rolePermissions[role] ?? {};
+    const merged: Record<PermissionKey, boolean> = { ...base };
+    for (const [k, v] of Object.entries(roleCustom) as [PermissionKey, boolean][]) {
+      if (k in base) merged[k] = v;
+    }
+    return merged;
+  }
+
+  function openPermissions(member: Member) {
+    setPermissionsFor(member);
+    setPermState(getEffective(member));
+  }
+
+  function togglePerm(key: PermissionKey) {
+    setPermState((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  async function savePermissions() {
+    if (!permissionsFor) return;
+    setSavingPerms(true);
+
+    const roleEffective = getRoleEffective(permissionsFor);
+
+    // Only store overrides that differ from the role-level effective value
+    const overrides = (Object.keys(permState) as PermissionKey[])
+      .filter((k) => permState[k] !== roleEffective[k])
+      .map((k) => ({ permission: k, granted: permState[k] }));
+
+    const res = await fetch(`/api/users/members/${permissionsFor.id}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overrides }),
+    });
+    setSavingPerms(false);
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error((d as { error?: string }).error ?? "Failed to save permissions");
+      return;
+    }
+
+    // Update local mirror
+    setLocalOverrides((prev) => ({
+      ...prev,
+      [permissionsFor.id]: overrides,
+    }));
+
+    toast.success("Permissions saved");
+    setPermissionsFor(null);
+    router.refresh();
+  }
+
+  const canEditMemberPerms = ["owner", "general_manager"].includes(session.role ?? "");
 
   function generatePassword(): string {
     const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -325,17 +421,30 @@ export function UsersClient({ members, invites, branches, session }: Props) {
                         {formatDate(m.created_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {canRemoveMember(m) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setRemoveConfirmId(m.id)}
-                            title="Remove member"
-                          >
-                            <UserMinus className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {canEditMemberPerms && m.role !== "owner" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={() => openPermissions(m)}
+                              title="Edit permissions"
+                            >
+                              <SlidersHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canRemoveMember(m) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setRemoveConfirmId(m.id)}
+                              title="Remove member"
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -658,6 +767,99 @@ export function UsersClient({ members, invites, branches, session }: Props) {
               Remove
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Member permissions dialog ── */}
+      <Dialog open={!!permissionsFor} onOpenChange={(o) => { if (!o) setPermissionsFor(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {permissionsFor?.full_name ?? "Member"} — Permissions
+            </DialogTitle>
+          </DialogHeader>
+
+          {permissionsFor && (() => {
+            const roleEffective = getRoleEffective(permissionsFor);
+            const hasOverrides = (localOverrides[permissionsFor.id] ?? []).length > 0;
+
+            return (
+              <div className="space-y-5 pt-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="capitalize text-xs">
+                    {formatRole(permissionsFor.role)}
+                  </Badge>
+                  {hasOverrides && (
+                    <Badge variant="secondary" className="text-xs">
+                      Has custom overrides
+                    </Badge>
+                  )}
+                  <p className="text-xs text-muted-foreground w-full">
+                    Switches show the effective value for this member. Anything that differs
+                    from the role default is saved as a personal override.
+                  </p>
+                </div>
+
+                {GROUPS.map((group) => {
+                  const defs = PERMISSION_DEFS.filter((d) => d.group === group);
+                  return (
+                    <div key={group}>
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        {group}
+                      </h3>
+                      <div className="rounded-lg border overflow-hidden divide-y">
+                        {defs.map((def) => {
+                          const isOverride = permState[def.key] !== roleEffective[def.key];
+                          return (
+                            <div
+                              key={def.key}
+                              className="flex items-center justify-between px-4 py-3"
+                            >
+                              <div className="space-y-0.5 min-w-0 mr-4">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium">{def.label}</p>
+                                  {isOverride && (
+                                    <Badge variant="secondary" className="text-xs h-4 px-1.5 py-0">
+                                      Override
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{def.description}</p>
+                              </div>
+                              <Switch
+                                checked={permState[def.key] ?? false}
+                                onCheckedChange={() => togglePerm(def.key)}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center gap-3 pt-1">
+                  <Button onClick={savePermissions} disabled={savingPerms}>
+                    {savingPerms && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save
+                  </Button>
+                  {hasOverrides && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={savingPerms}
+                      onClick={() => setPermState(roleEffective)}
+                    >
+                      Reset to role defaults
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => setPermissionsFor(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
