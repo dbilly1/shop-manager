@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logAuditAction } from "@/lib/audit-action";
@@ -685,7 +685,7 @@ export function CreditClient({
                     <h3 className="text-sm font-semibold">Transaction History</h3>
                   </div>
 
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm min-w-0">
                     <thead className="sticky top-0 bg-background border-b z-10">
                       <tr className="text-xs text-muted-foreground">
                         <th className="px-5 py-3 text-left font-medium">Date</th>
@@ -693,17 +693,16 @@ export function CreditClient({
                         <th className="px-3 py-3 text-left font-medium">Description</th>
                         <th className="px-3 py-3 text-right font-medium">Amount</th>
                         <th className="px-5 py-3 text-right font-medium">Balance</th>
-                        <th className="w-20" />
+                        <th className="px-4 py-3 w-24 text-right text-xs font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {ledgerPage.map((entry) => {
                         const isExpanded = expandedId === entry.id;
                         return (
-                          <>
+                          <Fragment key={entry.id}>
                             {/* ── Main row ── */}
                             <tr
-                              key={entry.id}
                               onClick={() =>
                                 entry.kind === "sale"
                                   ? setExpandedId(isExpanded ? null : entry.id)
@@ -838,25 +837,27 @@ export function CreditClient({
                                 </td>
                               </tr>
                             )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>
                   </table>
-                  <PaginationBar
-                    page={ledgerCurrentPage}
-                    totalPages={ledgerTotalPages}
-                    totalItems={ledgerTotalItems}
-                    pageSize={ledgerPageSize}
-                    startIndex={ledgerStart}
-                    endIndex={ledgerEnd}
-                    onPageChange={setLedgerPage}
-                    onPageSizeChange={setLedgerPageSize}
-                    label="transaction"
-                  />
                 </>
               )}
             </div>
+
+            {/* Pagination — outside scroll area so it sits as a fixed bottom bar */}
+            <PaginationBar
+              page={ledgerCurrentPage}
+              totalPages={ledgerTotalPages}
+              totalItems={ledgerTotalItems}
+              pageSize={ledgerPageSize}
+              startIndex={ledgerStart}
+              endIndex={ledgerEnd}
+              onPageChange={setLedgerPage}
+              onPageSizeChange={setLedgerPageSize}
+              label="transaction"
+            />
           </>
         )}
       </div>
