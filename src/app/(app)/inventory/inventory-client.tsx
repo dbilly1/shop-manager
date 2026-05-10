@@ -43,6 +43,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
+import { logAuditAction } from "@/lib/audit-action";
 import type { SessionContext } from "@/types";
 import { canManageInventory } from "@/lib/permissions";
 import { useBranch } from "@/hooks/useBranch";
@@ -472,6 +473,32 @@ export function InventoryClient({
           .update({ override_price: parseFloat(pSellingPrice) })
           .eq("id", editingBp.id);
       }
+      void logAuditAction({
+        branchId: session.branch_id ?? selectedBranchId ?? null,
+        action: "UPDATE_PRODUCT",
+        entityType: "product",
+        entityId: editingBp.product!.id,
+        oldValues: {
+          name: editingBp.product!.name,
+          sku: editingBp.product!.sku,
+          category: editingBp.product!.category,
+          unit_type: editingBp.product!.unit_type,
+          units_per_box: editingBp.product!.units_per_box,
+          base_price: editingBp.product!.base_price,
+          reorder_threshold: editingBp.product!.reorder_threshold,
+          audit_threshold_pct: editingBp.product!.audit_threshold_pct,
+        },
+        newValues: {
+          name: pName.trim(),
+          sku: pSku.trim() || null,
+          category: pCategory || null,
+          unit_type: pUnitType,
+          units_per_box: pUnitsPerBox ? parseFloat(pUnitsPerBox) : null,
+          base_price: parseFloat(pSellingPrice),
+          reorder_threshold: parseFloat(pLowStockThreshold) || 0,
+          audit_threshold_pct: pAuditThreshold ? parseFloat(pAuditThreshold) : null,
+        },
+      });
       toast.success("Product updated");
     } else {
       const targetBranchId = session.branch_id ?? selectedBranchId
@@ -525,6 +552,13 @@ export function InventoryClient({
       .eq("id", editingBp.id);
     setRemoving(false);
     if (error) { toast.error(error.message); return; }
+    void logAuditAction({
+      branchId: editingBp.branch_id,
+      action: "DISCONTINUE_PRODUCT",
+      entityType: "product",
+      entityId: editingBp.product!.id,
+      oldValues: { name: editingBp.product!.name, scope: "branch", branch_id: editingBp.branch_id },
+    });
     toast.success("Product removed from this branch");
     setProductDialogOpen(false);
     setConfirmAction(null);
@@ -554,6 +588,12 @@ export function InventoryClient({
         .update({ is_active: false })
         .eq("id", editingBp.product.id);
       if (error) { toast.error(error.message); setRemoving(false); return; }
+      void logAuditAction({
+        action: "DISCONTINUE_PRODUCT",
+        entityType: "product",
+        entityId: editingBp.product.id,
+        oldValues: { name: editingBp.product.name, scope: "shop", method: "soft_delete" },
+      });
       toast.success("Product discontinued (hidden from active lists)");
     } else {
       // Hard delete — no history to preserve
@@ -562,6 +602,12 @@ export function InventoryClient({
         .delete()
         .eq("id", editingBp.product.id);
       if (error) { toast.error(error.message); setRemoving(false); return; }
+      void logAuditAction({
+        action: "DISCONTINUE_PRODUCT",
+        entityType: "product",
+        entityId: editingBp.product.id,
+        oldValues: { name: editingBp.product.name, scope: "shop", method: "hard_delete" },
+      });
       toast.success("Product permanently deleted");
     }
     setRemoving(false);
@@ -645,6 +691,21 @@ export function InventoryClient({
       recorded_by:              session.user_id,
       recorded_by_name:         session.full_name ?? null,
     }).maybeSingle();
+
+    void logAuditAction({
+      branchId: restockBp.branch_id,
+      action: "RESTOCK_PRODUCT",
+      entityType: "product",
+      entityId: restockBp.product!.id,
+      newValues: {
+        product_name: restockBp.product!.name,
+        quantity_added: totalPrimary,
+        quantity_boxes: boxes,
+        unit_type: ut,
+        cost_per_unit: costPerUnit,
+        supplier: rSupplier || null,
+      },
+    });
 
     toast.success("Stock updated");
     setRestockBp(null);
@@ -767,6 +828,21 @@ export function InventoryClient({
         recorded_by:              session.user_id,
         recorded_by_name:         session.full_name ?? null,
       }).maybeSingle();
+
+      void logAuditAction({
+        branchId: bp.branch_id,
+        action: "RESTOCK_PRODUCT",
+        entityType: "product",
+        entityId: row.product_id,
+        newValues: {
+          product_name: row.product_name,
+          quantity_added: totalPrimary,
+          quantity_boxes: row.boxes,
+          unit_type: ut,
+          cost_per_unit: effectiveCpu,
+          supplier: row.supplier || null,
+        },
+      });
     }
 
     toast.success(`${validRows.length} product(s) restocked`);

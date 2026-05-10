@@ -188,6 +188,20 @@ export function ExpensesClient({
         return;
       }
 
+      await logAuditAction({
+        branchId,
+        action: "UPDATE_EXPENSE",
+        entityType: "expense",
+        entityId: editingExpense.id,
+        oldValues: {
+          amount: editingExpense.amount,
+          category: editingExpense.category,
+          description: editingExpense.description,
+          expense_date: editingExpense.expense_date,
+          payment_method: editingExpense.payment_method,
+        },
+        newValues: { amount: parsedAmount, category, description: description.trim(), expense_date: date, payment_method },
+      });
       setExpenses((prev) =>
         prev.map((ex) =>
           ex.id === editingExpense.id ? (data as Expense) : ex,

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/utils/format"
 import { toast } from "sonner"
+import { logAuditAction } from "@/lib/audit-action"
 import {
   CalendarDays, CheckCircle2, AlertTriangle, Loader2,
   ChevronRight, Clock, Layers, FileText, Plus, Trash2,
@@ -350,6 +351,23 @@ export function ReconciliationClient({
         .single()
 
       if (error) { toast.error(error.message); return }
+
+      void logAuditAction({
+        branchId,
+        action: "SUBMIT_RECONCILIATION",
+        entityType: "reconciliation",
+        entityId: upserted.id,
+        newValues: {
+          reconciliation_date: selectedDate,
+          status: upserted.status,
+          expected_cash: payload.expected_cash,
+          actual_cash: payload.actual_cash,
+          cash_variance: payload.cash_variance,
+          expected_mobile: payload.expected_mobile,
+          actual_mobile: payload.actual_mobile,
+          mobile_variance: payload.mobile_variance,
+        },
+      })
 
       // Update local state
       setReconciliations((prev) => {

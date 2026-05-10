@@ -114,7 +114,13 @@ export function TransfersClient({ transfers, branches, products, session }: Prop
 
   async function handleReject(id: string) {
     const supabase = createClient()
-    await supabase.from("stock_transfers").update({ status: "rejected" }).eq("id", id)
+    const { error } = await supabase.from("stock_transfers").update({ status: "rejected" }).eq("id", id)
+    if (error) { toast.error(error.message); return }
+    void logAuditAction({
+      action: "REJECT_TRANSFER",
+      entityType: "stock_transfer",
+      entityId: id,
+    })
     toast.success("Transfer rejected")
     router.refresh()
   }

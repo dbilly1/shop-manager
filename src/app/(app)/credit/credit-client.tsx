@@ -338,12 +338,22 @@ export function CreditClient({
 
   // ─── Recalculate all credit_sale balances for current customer ────────────
   // Called after any payment is added, edited, or deleted to keep balances accurate.
+  // Always fetches ALL credit_sales from DB (not just the balance > 0 subset from props).
   async function recalculateBalances(excludePaymentId?: string) {
     if (!selectedGroup) return;
 
-    const sortedSales = [...selectedGroup.sales].sort((a, b) => {
-      const da = a.sale?.sale_date ?? a.created_at.slice(0, 10);
-      const db = b.sale?.sale_date ?? b.created_at.slice(0, 10);
+    // Fetch every credit_sale for this customer (props only contain balance > 0 ones)
+    const { data: allSales } = await supabase
+      .from("credit_sales")
+      .select("id, amount_owed, sale_id, created_at, sale:sales(sale_date)")
+      .eq("customer_id", selectedGroup.customerId)
+      .order("created_at", { ascending: true });
+
+    const sortedSales = (allSales ?? []).sort((a, b) => {
+      const saleA = a.sale as unknown as { sale_date: string } | null;
+      const saleB = b.sale as unknown as { sale_date: string } | null;
+      const da = saleA?.sale_date ?? a.created_at.slice(0, 10);
+      const db = saleB?.sale_date ?? b.created_at.slice(0, 10);
       return da.localeCompare(db);
     });
 
@@ -459,7 +469,7 @@ export function CreditClient({
     if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
 
     setEditLoading(true);
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("credit_payments")
       .update({
         amount,
@@ -468,9 +478,36 @@ export function CreditClient({
         notes: editNotes.trim() || null,
         received_at_shop: editReceivedAtShop,
       })
-      .eq("id", editPayment.id);
+      .eq("id", editPayment.id)
+      .select();
 
     if (error) { toast.error(error.message); setEditLoading(false); return; }
+    if (!updated || updated.length === 0) {
+      toast.error("Update failed — you may not have permission to edit this payment.");
+      setEditLoading(false);
+      return;
+    }
+
+    await logAuditAction({
+      branchId: selectedGroup.branchId,
+      action: "EDIT_CREDIT_PAYMENT",
+      entityType: "credit_payment",
+      entityId: editPayment.id,
+      oldValues: {
+        amount: editPayment.amount,
+        payment_method: editPayment.payment_method,
+        payment_date: editPayment.payment_date,
+        notes: editPayment.notes,
+        received_at_shop: editPayment.received_at_shop,
+      },
+      newValues: {
+        amount,
+        payment_method: editMethod,
+        payment_date: editDate,
+        notes: editNotes.trim() || null,
+        received_at_shop: editReceivedAtShop,
+      },
+    });
 
     await recalculateBalances();
 
@@ -492,6 +529,21 @@ export function CreditClient({
       .eq("id", deletePayment.id);
 
     if (error) { toast.error(error.message); setDeleteLoading(false); return; }
+
+    await logAuditAction({
+      branchId: selectedGroup.branchId,
+      action: "DELETE_CREDIT_PAYMENT",
+      entityType: "credit_payment",
+      entityId: deletePayment.id,
+      oldValues: {
+        amount: deletePayment.amount,
+        payment_method: deletePayment.payment_method,
+        payment_date: deletePayment.payment_date,
+        notes: deletePayment.notes,
+        received_at_shop: deletePayment.received_at_shop,
+        customer_id: deletePayment.customer_id,
+      },
+    });
 
     await recalculateBalances(deletePayment.id);
 
@@ -518,6 +570,16 @@ export function CreditClient({
       .update({ name: editCustName.trim(), phone: editCustPhone.trim() || null })
       .eq("id", selectedGroup.customerId);
     if (error) { toast.error(error.message); setEditCustLoading(false); return; }
+
+    await logAuditAction({
+      branchId: selectedGroup.branchId,
+      action: "UPDATE_CUSTOMER",
+      entityType: "customer",
+      entityId: selectedGroup.customerId,
+      oldValues: { name: selectedGroup.name, phone: selectedGroup.phone },
+      newValues: { name: editCustName.trim(), phone: editCustPhone.trim() || null },
+    });
+
     toast.success("Customer updated");
     setEditCustOpen(false);
     setEditCustLoading(false);
@@ -538,6 +600,15 @@ export function CreditClient({
       .delete()
       .eq("id", selectedGroup.customerId);
     if (error) { toast.error(error.message); setDeleteCustLoading(false); return; }
+
+    await logAuditAction({
+      branchId: selectedGroup.branchId,
+      action: "DELETE_CUSTOMER",
+      entityType: "customer",
+      entityId: selectedGroup.customerId,
+      oldValues: { name: selectedGroup.name, phone: selectedGroup.phone },
+    });
+
     toast.success("Customer deleted");
     setDeleteCustOpen(false);
     setSelectedCustomerId(null);

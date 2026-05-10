@@ -275,6 +275,11 @@ export function AdjustmentsClient({
     if (error) {
       toast.error(error.message);
     } else {
+      void logAuditAction({
+        action: "REJECT_ADJUSTMENT",
+        entityType: "stock_adjustment",
+        entityId: id,
+      });
       toast.success("Adjustment rejected");
       router.refresh();
     }

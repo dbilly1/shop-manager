@@ -1,24 +1,43 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export type AuditAction =
+  // ── Sales ──────────────────────────────────────────────────────────────────
   | "CREATE_SALE"
-  | "DELETE_SALE"
-  | "EDIT_SALE"
   | "UPDATE_SALE"
+  | "DELETE_SALE"
+  // ── Products / Inventory ───────────────────────────────────────────────────
   | "CREATE_PRODUCT"
   | "UPDATE_PRODUCT"
-  | "CREATE_BRANCH"
+  | "RESTOCK_PRODUCT"
+  | "DISCONTINUE_PRODUCT"
+  // ── Stock adjustments ──────────────────────────────────────────────────────
   | "CREATE_ADJUSTMENT"
   | "APPROVE_ADJUSTMENT"
-  | "SUBMIT_RECONCILIATION"
-  | "CREATE_EXPENSE"
-  | "ADD_CUSTOMER"
-  | "RECORD_CREDIT_PAYMENT"
+  | "REJECT_ADJUSTMENT"
+  // ── Stock transfers ────────────────────────────────────────────────────────
   | "CREATE_TRANSFER"
   | "APPROVE_TRANSFER"
+  | "REJECT_TRANSFER"
+  // ── Expenses ───────────────────────────────────────────────────────────────
+  | "CREATE_EXPENSE"
+  | "UPDATE_EXPENSE"
+  | "DELETE_EXPENSE"
+  // ── Credit payments ────────────────────────────────────────────────────────
+  | "RECORD_CREDIT_PAYMENT"
+  | "EDIT_CREDIT_PAYMENT"
+  | "DELETE_CREDIT_PAYMENT"
+  // ── Customers ──────────────────────────────────────────────────────────────
+  | "ADD_CUSTOMER"
+  | "UPDATE_CUSTOMER"
+  | "DELETE_CUSTOMER"
+  // ── Reconciliation ─────────────────────────────────────────────────────────
+  | "SUBMIT_RECONCILIATION"
+  // ── Stock audits ───────────────────────────────────────────────────────────
   | "CREATE_STOCK_AUDIT"
   | "COMPLETE_STOCK_AUDIT"
   | "CANCEL_STOCK_AUDIT"
+  // ── Org / settings ─────────────────────────────────────────────────────────
+  | "CREATE_BRANCH"
 
 export interface LogAuditParams {
   shopId: string

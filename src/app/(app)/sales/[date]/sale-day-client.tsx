@@ -12,6 +12,7 @@ import { formatCurrency, formatDate, formatPaymentMethod } from "@/utils/format"
 import { ArrowLeft, Trash2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext } from "@/types"
+import { logAuditAction } from "@/lib/audit-action"
 
 interface SaleWithItems {
   id: string
@@ -51,11 +52,24 @@ export function SaleDayClient({ date, sales, currency, session }: Props) {
     setDeleting(true)
 
     const supabase = createClient()
+    const saleToDelete = sales.find((s) => s.id === deleteTarget)
     const { error } = await supabase.from("sales").delete().eq("id", deleteTarget)
 
     if (error) {
       toast.error(error.message)
     } else {
+      void logAuditAction({
+        branchId: session.branch_id,
+        action: "DELETE_SALE",
+        entityType: "sale",
+        entityId: deleteTarget,
+        oldValues: {
+          total_amount: saleToDelete?.total_amount,
+          payment_method: saleToDelete?.payment_method,
+          sale_date: date,
+          items_count: saleToDelete?.sale_items.length,
+        },
+      })
       toast.success("Sale deleted")
       router.refresh()
     }
