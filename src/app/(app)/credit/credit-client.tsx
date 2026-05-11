@@ -651,7 +651,11 @@ export function CreditClient({
           setMobileView("detail");
         }}
         className={`border rounded-lg p-3 w-full text-left transition-colors ${
-          isActive ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-muted/50"
+          isActive
+            ? "border-primary bg-primary/5"
+            : settled
+            ? "border-border/50 bg-muted/20 hover:bg-muted/40 opacity-60"
+            : "border-border bg-background hover:bg-muted/50"
         }`}
       >
         <div className="flex items-start justify-between gap-2">
@@ -715,10 +719,9 @@ export function CreditClient({
               {/* Settled customers — shown below with a divider */}
               {settledGroups.length > 0 && (
                 <>
-                  <div className="flex items-center gap-2 px-1 pt-2 pb-1">
-                    <div className="flex-1 h-px bg-border" />
+                  <div className="px-1 pt-3 pb-1">
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Settled</span>
-                    <div className="flex-1 h-px bg-border" />
+                    <div className="mt-1 h-px bg-border" />
                   </div>
                   {settledGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
                 </>
@@ -749,9 +752,6 @@ export function CreditClient({
                   >
                     <ArrowLeft className="size-4" />
                   </button>
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <User className="size-5 text-primary" />
-                  </div>
                   <div className="min-w-0">
                     <h2 className="font-semibold text-base leading-tight truncate">{selectedGroup.name}</h2>
                     {selectedGroup.phone && (
@@ -773,9 +773,9 @@ export function CreditClient({
                     setPayAmount(""); setPayDate(todayIso());
                     setPayMethod("cash"); setPayNotes(""); setPayReceivedAtShop(true);
                     setPayOpen(true);
-                  }}>
-                    <Wallet className="size-3.5 mr-1.5" />
-                    Record Payment
+                  }} aria-label="Record Payment">
+                    <Wallet className="size-3.5 md:mr-1.5" />
+                    <span className="hidden md:inline">Record Payment</span>
                   </Button>
                 </div>
               </div>
