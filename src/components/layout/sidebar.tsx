@@ -32,6 +32,10 @@ import {
   Building2,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
 
 interface NavItem {
   href: string;
@@ -45,11 +49,15 @@ export function Sidebar({
   shopLogo,
   shopColour,
   featureFlags = {},
+  mobileOpen = false,
+  onMobileClose,
 }: {
   shopName: string;
   shopLogo?: string | null;
   shopColour?: string | null;
   featureFlags?: Record<string, boolean>;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
   const pathname = usePathname();
   const { role } = useSession();
@@ -144,49 +152,39 @@ export function Sidebar({
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
-  return (
-    <aside
-      className="hidden md:flex flex-col w-60 shrink-0 border-r bg-background h-screen sticky top-0"
-      style={sidebarStyle}
-    >
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
+  // Shared nav content (used in both desktop aside and mobile Sheet)
+  const hsl = shopColour ? hexToHsl(shopColour) : null;
+
+  const NavContent = ({ onLinkClick }: { onLinkClick?: () => void }) => (
+    <>
+      {/* Logo / shop name */}
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10 shrink-0">
         {shopLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={shopLogo}
-            alt={shopName}
-            className="h-7 w-7 rounded object-cover"
-          />
+          <img src={shopLogo} alt={shopName} className="h-7 w-7 rounded object-cover" />
         ) : (
           <Building2 className="h-6 w-6 shrink-0 text-white" />
         )}
-        <span className="font-semibold text-sm truncate text-white">
-          {shopName}
-        </span>
+        <span className="font-semibold text-sm truncate text-white">{shopName}</span>
       </div>
 
-      {/* Nav */}
+      {/* Nav links */}
       <ScrollArea className="flex-1 py-2">
         <nav className="px-2 space-y-0.5">
           {nav
             .filter((item) => item.show !== false)
             .map((item) => {
               const Icon = item.icon;
-              const active =
-                pathname === item.href || pathname.startsWith(item.href + "/");
-              const hsl = shopColour ? hexToHsl(shopColour) : null;
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
               const activeStyle =
                 shopColour && active && hsl
-                  ? {
-                      backgroundColor: `hsl(${hsl[0]} ${hsl[1]}% 35%)`,
-                      color: "#fff",
-                    }
+                  ? { backgroundColor: `hsl(${hsl[0]} ${hsl[1]}% 35%)`, color: "#fff" }
                   : {};
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onLinkClick}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     active
@@ -202,6 +200,30 @@ export function Sidebar({
             })}
         </nav>
       </ScrollArea>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* ── Desktop sidebar ── */}
+      <aside
+        className="hidden md:flex flex-col w-60 shrink-0 border-r h-screen sticky top-0"
+        style={sidebarStyle}
+      >
+        <NavContent />
+      </aside>
+
+      {/* ── Mobile sidebar (Sheet/drawer) ── */}
+      <Sheet open={mobileOpen} onOpenChange={(open) => { if (!open) onMobileClose?.() }}>
+        <SheetContent
+          side="left"
+          showCloseButton={false}
+          className="p-0 flex flex-col w-[240px] sm:w-[260px]"
+          style={sidebarStyle}
+        >
+          <NavContent onLinkClick={onMobileClose} />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

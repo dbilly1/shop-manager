@@ -264,12 +264,12 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
 
         {/* ── Sticky tab bar ── */}
         <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b border-border">
-          <div className="flex gap-1 px-4 md:px-6">
+          <div className="flex gap-1 px-4 md:px-6 overflow-x-auto scrollbar-none">
             {(["general", "branches", "roles", "taxes", "receipt", "billing", "security"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-3 text-sm font-medium border-b-2 transition-colors -mb-px capitalize ${
+                className={`px-3 py-3 text-sm font-medium border-b-2 transition-colors -mb-px capitalize whitespace-nowrap shrink-0 ${
                   activeTab === tab
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"

@@ -218,7 +218,7 @@ function RestocksTab({ session, branchId, currency }: { session: SessionContext;
         ) : (
           <div className="rounded-lg border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[540px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
                     {["Date","Product","Qty Added","Boxes","Cost/Box","vs Previous","Cost/Unit","Total Cost","Supplier","Notes","Added By"].map((h) => (
@@ -344,7 +344,7 @@ function AdjustmentsTab({ session, branchId, currency }: { session: SessionConte
         ) : (
           <div className="rounded-lg border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[540px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
                     {["Date","Product","Qty Change","Type","Reason","Status","Notes","By"].map((h) => (
@@ -561,7 +561,8 @@ function StockAuditsTab({ session, branchId, currency, branches }: { session: Se
                     </span>
                   </button>
                   {isOpen && (
-                    <table className="w-full text-sm border-t">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-sm border-t">
                       <thead>
                         <tr className="border-b bg-muted/10">
                           {["Product","System Stock","Physical Count","Variance","OK?","Action"].map((h) => (
@@ -599,6 +600,7 @@ function StockAuditsTab({ session, branchId, currency, branches }: { session: Se
                         })}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               )

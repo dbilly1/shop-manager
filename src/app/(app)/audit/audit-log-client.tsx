@@ -139,7 +139,7 @@ export function AuditLogClient({ logs, userNames, branchNames }: Props) {
             {/* Entry table */}
             {isExpanded && (
               <div className="border-t overflow-x-auto">
-                <table className="text-sm w-full">
+                <table className="text-sm w-full min-w-[640px]">
                   <thead>
                     <tr className="bg-slate-50 text-left">
                       <th className="px-4 py-2 text-xs font-medium text-slate-500 whitespace-nowrap">Time</th>

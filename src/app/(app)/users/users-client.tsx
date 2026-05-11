@@ -361,7 +361,8 @@ export function UsersClient({ members, invites, branches, session, rolePermissio
 
         <TabsContent value="members" className="mt-4">
           <div className="border rounded overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[540px] text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
@@ -451,12 +452,14 @@ export function UsersClient({ members, invites, branches, session, rolePermissio
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </TabsContent>
 
         <TabsContent value="invites" className="mt-4">
           <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
@@ -540,6 +543,7 @@ export function UsersClient({ members, invites, branches, session, rolePermissio
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

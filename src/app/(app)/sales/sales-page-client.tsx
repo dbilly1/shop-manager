@@ -1197,7 +1197,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 // One row per SALE — items stacked with <p> tags inside each cell
                 function SalesTable({ sales }: { sales: IndividualSale[] }) {
                   return (
-                    <table className="w-full text-sm table-fixed">
+                    <table className="w-full min-w-[560px] text-sm table-fixed">
                       <colgroup>
                         <col style={{ width: "9%" }} />
                         <col style={{ width: "22%" }} />

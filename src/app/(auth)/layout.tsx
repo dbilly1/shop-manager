@@ -86,6 +86,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           border-top: 1px solid #2a2a27;
           margin: 1.25rem 0;
         }
+
+        @media (max-width: 480px) {
+          .auth-card { padding: 1.375rem !important; }
+        }
       `}</style>
 
       {/* Logo */}
@@ -108,6 +112,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       {/* Card */}
       <div
+        className="auth-card"
         style={{
           width: "100%",
           maxWidth: "420px",

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Playfair_Display, DM_Sans, DM_Mono } from "next/font/google"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { LandingMobileNav } from "./landing-mobile-nav"
 
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair", weight: ["400", "700", "900"] })
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
@@ -145,6 +146,8 @@ export default async function LandingPage() {
           .lp-how-grid { grid-template-columns: 1fr !important; }
           .lp-pricing-grid { grid-template-columns: 1fr 1fr !important; }
           .lp-testimonials-grid { grid-template-columns: 1fr !important; }
+          .lp-hero-cta { flex-direction: column !important; }
+          .lp-hero-cta a { width: 100%; justify-content: center; }
         }
         @media (max-width: 560px) {
           .lp-pricing-grid { grid-template-columns: 1fr !important; }
@@ -164,15 +167,16 @@ export default async function LandingPage() {
               Shop<strong style={{ fontWeight: 700 }}>Manager</strong>
             </span>
           </Link>
-          <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
+          <div className="lp-desktop-nav" style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
             <a href="#features" className="lp-nav-link">Features</a>
             <a href="#pricing" className="lp-nav-link">Pricing</a>
             <a href="#faq" className="lp-nav-link">FAQ</a>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+          <div className="lp-desktop-cta" style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
             <a href="/login" className="lp-btn-ghost">Log In</a>
             <a href="/signup" className="lp-btn-primary">Get Started Free</a>
           </div>
+          <LandingMobileNav />
         </div>
       </nav>
 
@@ -193,7 +197,7 @@ export default async function LandingPage() {
             <p style={{ marginTop: "1.5rem", fontSize: "1rem", color: C.muted, lineHeight: 1.7, maxWidth: "440px" }}>
               ShopManager gives retail businesses everything they need — sales, inventory, expenses, credit, and reports — in one platform. Free to start.
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginTop: "2.25rem" }}>
+            <div className="lp-hero-cta" style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginTop: "2.25rem" }}>
               <a href="/signup" className="lp-btn-primary" style={{ fontSize: "0.9375rem", padding: "0.75rem 1.75rem" }}>
                 Get Started Free
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

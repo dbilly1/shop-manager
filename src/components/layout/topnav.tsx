@@ -30,9 +30,10 @@ import { ThemeToggle } from "@/components/ui/theme-toggle"
 interface TopNavProps {
   userEmail: string
   userName: string
+  onMenuClick?: () => void
 }
 
-export function TopNav({ userEmail, userName }: TopNavProps) {
+export function TopNav({ userEmail, userName, onMenuClick }: TopNavProps) {
   const router = useRouter()
   const { role } = useSession()
   const { branches, selectedBranchId, setSelectedBranchId } = useBranch()
@@ -54,8 +55,8 @@ export function TopNav({ userEmail, userName }: TopNavProps) {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background px-4">
-      {/* Mobile menu button placeholder */}
-      <Button variant="ghost" size="icon" className="md:hidden">
+      {/* Mobile menu button */}
+      <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick}>
         <Menu className="h-5 w-5" />
       </Button>
 

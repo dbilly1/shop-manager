@@ -141,7 +141,8 @@ export function CustomersClient({
       </div>
 
       <div className="border rounded overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
@@ -210,6 +211,7 @@ export function CustomersClient({
             )}
           </tbody>
         </table>
+        </div>
         <PaginationBar
           page={currentPage}
           totalPages={totalPages}

@@ -320,7 +320,7 @@ function SummaryTable({ rows, start, end, currency }: { rows: ProductRow[]; star
         <span className="text-sm font-medium">{formatRangeLabel(start, end)}</span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b bg-muted/20">
               {["Product","Qty Sold","Cash","Mobile","Credit","Revenue","COGS","Gross Profit"].map((h) => (

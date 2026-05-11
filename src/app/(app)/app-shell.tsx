@@ -99,6 +99,8 @@ export function AppShell({
     router.refresh()
   }
 
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+
   const shopColour =
     shop?.primary_colour && shop.primary_colour !== "#1b1a19" ? shop.primary_colour : null
   const selectedBranch = branches.find((b) => b.id === selectedBranchId) ?? null
@@ -109,9 +111,20 @@ export function AppShell({
         value={{ branches, selectedBranchId, setSelectedBranchId: handleSetBranch, selectedBranch }}
       >
         <div className="flex h-screen bg-background">
-          <Sidebar shopName={shop?.name ?? "ShopManager"} shopLogo={shop?.logo_url} shopColour={shopColour} featureFlags={featureFlags} />
+          <Sidebar
+            shopName={shop?.name ?? "ShopManager"}
+            shopLogo={shop?.logo_url}
+            shopColour={shopColour}
+            featureFlags={featureFlags}
+            mobileOpen={mobileSidebarOpen}
+            onMobileClose={() => setMobileSidebarOpen(false)}
+          />
           <div className="flex flex-1 flex-col overflow-hidden">
-            <TopNav userEmail={userEmail} userName={session.full_name ?? userEmail.split("@")[0] ?? "User"} />
+            <TopNav
+              userEmail={userEmail}
+              userName={session.full_name ?? userEmail.split("@")[0] ?? "User"}
+              onMenuClick={() => setMobileSidebarOpen(true)}
+            />
             <AnnouncementBanner announcements={announcements} />
             <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
           </div>
