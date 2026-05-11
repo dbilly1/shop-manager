@@ -34,7 +34,6 @@ export default async function CreditPage() {
       )
     `)
     .eq("shop_id", session.shop_id!)
-    .gt("balance", 0)
     .order("created_at", { ascending: false })
 
   if (activeBranchId) csQuery.eq("branch_id", activeBranchId)

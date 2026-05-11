@@ -38,6 +38,8 @@ import {
   ChevronDown,
   ShoppingCart,
   Store,
+  ArrowLeft,
+  Search,
 } from "lucide-react";
 import type { SessionContext } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
@@ -173,6 +175,9 @@ export function CreditClient({
   // ── Selection + expand ────────────────────────────────────────────────────
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  // Mobile: "list" shows customer panel full-screen; "detail" shows ledger panel
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   // ── Record payment dialog ─────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
@@ -211,7 +216,7 @@ export function CreditClient({
   const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   // ─── Group credit sales by customer ──────────────────────────────────────
-  const customerGroups = useMemo<CustomerGroup[]>(() => {
+  const { owingGroups, settledGroups, allGroups } = useMemo(() => {
     const map = new Map<string, CustomerGroup>();
     for (const row of creditSales) {
       const cid = row.customer_id;
@@ -233,12 +238,26 @@ export function CreditClient({
       g.outstanding += row.balance;
       g.sales.push(row);
     }
-    return Array.from(map.values()).sort((a, b) => b.outstanding - a.outstanding);
-  }, [creditSales]);
+
+    const q = searchQuery.trim().toLowerCase();
+    const all = Array.from(map.values()).filter(
+      (g) => !q || g.name.toLowerCase().includes(q) || (g.phone ?? "").includes(q),
+    );
+
+    return {
+      allGroups: all,
+      owingGroups: all
+        .filter((g) => g.outstanding > 0)
+        .sort((a, b) => b.outstanding - a.outstanding),
+      settledGroups: all
+        .filter((g) => g.outstanding <= 0)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  }, [creditSales, searchQuery]);
 
   const selectedGroup = useMemo(
-    () => customerGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
-    [customerGroups, selectedCustomerId],
+    () => allGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
+    [allGroups, selectedCustomerId],
   );
 
   // ─── Build chronological ledger ───────────────────────────────────────────
@@ -393,8 +412,11 @@ export function CreditClient({
   }
 
   // ─── Overdue check ────────────────────────────────────────────────────────
+  // Only looks at sales that still carry an outstanding balance — a customer
+  // shouldn't be flagged overdue based on a sale they've already fully paid.
   function isOverdue(group: CustomerGroup): boolean {
-    const oldest = group.sales.reduce<string | null>((min, s) => {
+    const unpaidSales = group.sales.filter((s) => s.balance > 0);
+    const oldest = unpaidSales.reduce<string | null>((min, s) => {
       const d = s.sale?.sale_date ?? s.created_at.slice(0, 10);
       return !min || d < min ? d : min;
     }, null);
@@ -616,68 +638,117 @@ export function CreditClient({
     router.refresh();
   }
 
+  // ─── Customer card (shared between owing + settled lists) ────────────────
+  function CustomerCard({ group }: { group: CustomerGroup }) {
+    const isActive = group.customerId === selectedCustomerId;
+    const overdue = group.outstanding > 0 && isOverdue(group);
+    const settled = group.outstanding <= 0;
+    return (
+      <button
+        key={group.customerId}
+        onClick={() => {
+          setSelectedCustomerId(group.customerId);
+          setMobileView("detail");
+        }}
+        className={`border rounded-lg p-3 w-full text-left transition-colors ${
+          isActive ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-muted/50"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-medium text-sm leading-tight line-clamp-1">{group.name}</span>
+          {settled ? (
+            <Badge className="shrink-0 bg-green-100 text-green-700 hover:bg-green-100 border-green-200">Settled</Badge>
+          ) : (
+            <Badge variant="destructive" className="shrink-0 tabular-nums">
+              {formatCurrency(group.outstanding, currency)}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-1">
+          {group.phone ? (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Phone className="size-3" />
+              <span>{group.phone}</span>
+            </div>
+          ) : <span />}
+          {overdue && <span className="text-xs font-medium text-red-600">Overdue</span>}
+        </div>
+      </button>
+    );
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
 
-      {/* ── Left panel ── */}
-      <div className="w-72 shrink-0 border-r flex flex-col">
+      {/* ── Left panel: customer list ── */}
+      <div className={`border-r flex-col md:flex md:w-72 md:shrink-0 ${mobileView === "list" ? "flex flex-1" : "hidden"}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 className="font-semibold text-sm">Customers</h2>
         </div>
+
+        {/* Search */}
+        <div className="px-3 py-2 border-b shrink-0">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by name or phone…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border bg-muted/30 focus:outline-none focus:border-primary/50 focus:bg-background transition-colors"
+            />
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-          {customerGroups.length === 0 ? (
+          {owingGroups.length === 0 && settledGroups.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-xs text-center px-4">
               <CreditCard className="size-8 mb-2 opacity-40" />
-              No outstanding credit
+              {searchQuery ? "No customers match your search" : "No credit records found"}
             </div>
           ) : (
-            customerGroups.map((group) => {
-              const isActive = group.customerId === selectedCustomerId;
-              const overdue = isOverdue(group);
-              return (
-                <button
-                  key={group.customerId}
-                  onClick={() => setSelectedCustomerId(group.customerId)}
-                  className={`border rounded-lg p-3 w-full text-left transition-colors ${
-                    isActive ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium text-sm leading-tight line-clamp-1">{group.name}</span>
-                    <Badge variant="destructive" className="shrink-0 tabular-nums">
-                      {formatCurrency(group.outstanding, currency)}
-                    </Badge>
+            <>
+              {/* Owing customers */}
+              {owingGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
+
+              {/* Settled customers — shown below with a divider */}
+              {settledGroups.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 px-1 pt-2 pb-1">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Settled</span>
+                    <div className="flex-1 h-px bg-border" />
                   </div>
-                  <div className="flex items-center justify-between mt-1">
-                    {group.phone ? (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Phone className="size-3" />
-                        <span>{group.phone}</span>
-                      </div>
-                    ) : <span />}
-                    {overdue && <span className="text-xs font-medium text-red-600">Overdue</span>}
-                  </div>
-                </button>
-              );
-            })
+                  {settledGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* ── Right panel ── */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      {/* ── Right panel: ledger ── */}
+      <div className={`flex-col overflow-hidden md:flex md:flex-1 ${mobileView === "detail" ? "flex flex-1" : "hidden"}`}>
         {!selectedGroup ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+          <div className="hidden md:flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <User className="size-12 opacity-30" />
             <p className="text-sm">Select a customer to view their credit history</p>
           </div>
         ) : (
           <>
             {/* Header */}
-            <div className="border-b px-6 py-4 shrink-0 bg-background">
+            <div className="border-b px-4 md:px-6 py-4 shrink-0 bg-background">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
+                  {/* Back button — mobile only */}
+                  <button
+                    onClick={() => setMobileView("list")}
+                    className="md:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    aria-label="Back to customers"
+                  >
+                    <ArrowLeft className="size-4" />
+                  </button>
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <User className="size-5 text-primary" />
                   </div>
@@ -756,7 +827,8 @@ export function CreditClient({
                     <h3 className="text-sm font-semibold">Transaction History</h3>
                   </div>
 
-                  <table className="w-full text-sm min-w-0">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
                     <thead className="sticky top-0 bg-background border-b z-10">
                       <tr className="text-xs text-muted-foreground">
                         <th className="px-5 py-3 text-left font-medium">Date</th>
@@ -913,6 +985,7 @@ export function CreditClient({
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </>
               )}
             </div>
