@@ -783,24 +783,15 @@ export function CreditClient({
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <TrendingDown className="size-3.5 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">Total Credit</p>
-                  </div>
+                  <p className="text-xs text-muted-foreground mb-1">Total Credit</p>
                   <p className="font-bold text-sm tabular-nums">{formatCurrency(selectedGroup.totalOwed, currency)}</p>
                 </div>
                 <div className="rounded-lg border bg-muted/30 px-4 py-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <CheckCircle2 className="size-3.5 text-green-600" />
-                    <p className="text-xs text-muted-foreground">Total Paid</p>
-                  </div>
+                  <p className="text-xs text-muted-foreground mb-1">Total Paid</p>
                   <p className="font-bold text-sm text-green-700 tabular-nums">{formatCurrency(selectedGroup.totalPaid, currency)}</p>
                 </div>
                 <div className={`rounded-lg border px-4 py-3 ${selectedGroup.outstanding > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <ArrowDownLeft className={`size-3.5 ${selectedGroup.outstanding > 0 ? "text-red-500" : "text-green-600"}`} />
-                    <p className="text-xs text-muted-foreground">Outstanding</p>
-                  </div>
+                  <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
                   <p className={`font-bold text-sm tabular-nums ${selectedGroup.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
                     {formatCurrency(selectedGroup.outstanding, currency)}
                   </p>
@@ -865,13 +856,11 @@ export function CreditClient({
                               {/* Type badge */}
                               <td className="px-3 py-3">
                                 {entry.kind === "sale" ? (
-                                  <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium bg-background text-foreground">
-                                    <ShoppingCart className="size-3 text-muted-foreground" />
+                                  <span className="inline-flex rounded-md border px-2 py-0.5 text-xs font-medium bg-background text-foreground">
                                     Sale
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                                    <CheckCircle2 className="size-3" />
+                                  <span className="inline-flex rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                                     Payment
                                   </span>
                                 )}
