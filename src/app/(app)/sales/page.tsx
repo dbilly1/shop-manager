@@ -14,7 +14,7 @@ export default async function SalesPage() {
   // Sales — all time, no date cap
   const salesQuery = supabase
     .from("sales")
-    .select("sale_date, total_amount, payment_method")
+    .select("sale_date, total_amount, payment_method, taxes_snapshot")
     .eq("shop_id", session.shop_id!)
     .order("sale_date", { ascending: false })
     .limit(10000)
@@ -36,12 +36,14 @@ export default async function SalesPage() {
   }
 
   // Aggregate sales by date
-  const byDate: Record<string, { total: number; cash: number; mobile: number; credit: number; count: number }> = {}
+  const byDate: Record<string, { total: number; cash: number; mobile: number; credit: number; count: number; tax: number }> = {}
   for (const s of salesRaw ?? []) {
-    if (!byDate[s.sale_date]) byDate[s.sale_date] = { total: 0, cash: 0, mobile: 0, credit: 0, count: 0 }
+    if (!byDate[s.sale_date]) byDate[s.sale_date] = { total: 0, cash: 0, mobile: 0, credit: 0, count: 0, tax: 0 }
     byDate[s.sale_date].total += s.total_amount
     byDate[s.sale_date][s.payment_method as "cash" | "mobile" | "credit"] += s.total_amount
     byDate[s.sale_date].count++
+    const saleTax = ((s.taxes_snapshot ?? []) as { amount: number }[]).reduce((sum, t) => sum + t.amount, 0)
+    byDate[s.sale_date].tax += saleTax
   }
 
   const summaries = Object.entries(byDate)

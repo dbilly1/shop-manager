@@ -15,6 +15,7 @@ interface RawSale {
   sale_date: string
   payment_method: string
   branch_id: string
+  taxes_snapshot: { label: string; rate: number; amount: number }[]
   sale_items: RawSaleItem[]
 }
 
@@ -111,7 +112,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
       let q = supabase
         .from("sales")
         .select(`
-          id, sale_date, payment_method, branch_id,
+          id, sale_date, payment_method, branch_id, taxes_snapshot,
           sale_items(product_id, quantity_kg, quantity_units, cost_price_at_sale, line_total,
             product:products(name, unit_type))
         `)
@@ -133,11 +134,16 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
   const { productRows, totals } = useMemo(() => {
     const map = new Map<string, ProductRow>()
     let totalRevenue = 0, totalCash = 0, totalMobile = 0, totalCredit = 0
-    let totalCogs = 0, txCount = 0
+    let totalCogs = 0, totalTax = 0, txCount = 0
     const seenSales = new Set<string>()
 
     for (const sale of sales) {
-      if (!seenSales.has(sale.id)) { seenSales.add(sale.id); txCount++ }
+      const isNew = !seenSales.has(sale.id)
+      if (isNew) {
+        seenSales.add(sale.id)
+        txCount++
+        totalTax += (sale.taxes_snapshot ?? []).reduce((s, t) => s + t.amount, 0)
+      }
       for (const item of sale.sale_items) {
         const ut   = item.product?.unit_type ?? "units"
         const qty  = ut === "kg" ? item.quantity_kg : item.quantity_units
@@ -166,7 +172,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
       productRows: [...map.values()].sort((a, b) => b.revenue - a.revenue),
       totals: {
         revenue: totalRevenue, cash: totalCash, mobile: totalMobile,
-        credit: totalCredit, cogs: totalCogs,
+        credit: totalCredit, cogs: totalCogs, tax: totalTax,
         profit: totalRevenue - totalCogs,
         margin: totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0,
         txCount,
@@ -214,6 +220,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
         "Qty Sold": `${r.qty.toFixed(r.unit_type === "kg" ? 3 : 0)} ${r.unit_type}`,
         Cash: r.cash.toFixed(2), Mobile: r.mobile.toFixed(2), Credit: r.credit.toFixed(2),
         Revenue: r.revenue.toFixed(2), COGS: r.cogs.toFixed(2), "Gross Profit": r.profit.toFixed(2),
+        ...(totals.tax > 0 ? { "Tax Collected": totals.tax.toFixed(2) } : {}),
       })),
       `sales-history-${start}-to-${end}.csv`
     )
@@ -225,6 +232,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
         "Qty Sold": `${r.qty.toFixed(r.unit_type === "kg" ? 3 : 0)} ${r.unit_type}`,
         Cash: r.cash, Mobile: r.mobile, Credit: r.credit,
         Revenue: r.revenue, COGS: r.cogs, "Gross Profit": r.profit,
+        ...(totals.tax > 0 ? { "Tax Collected": totals.tax } : {}),
       })) as Record<string, unknown>[],
       `sales-history-${start}-to-${end}.xlsx`
     )
@@ -264,7 +272,7 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
       {/* Page content */}
       <div className="px-4 md:px-6 pt-4 pb-6 space-y-5">
         {/* Stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid gap-4 ${totals.tax > 0 ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2 lg:grid-cols-4"}`}>
           <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
             <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Revenue</p>
             <p className="text-2xl font-bold mt-1">{fc(totals.revenue)}</p>
@@ -285,6 +293,13 @@ export function SalesHistory({ session, currency, activeBranchId }: Props) {
             <p className="text-2xl font-bold mt-1">{fc(totals.profit)}</p>
             <p className="text-sm text-muted-foreground mt-0.5">{totals.margin.toFixed(1)}% margin</p>
           </div>
+          {totals.tax > 0 && (
+            <div className="rounded-lg border bg-yellow-50 dark:bg-yellow-950/20 p-4">
+              <p className="text-sm font-medium text-yellow-600 dark:text-yellow-500">Tax Collected</p>
+              <p className="text-2xl font-bold mt-1">{fc(totals.tax)}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Included in revenue</p>
+            </div>
+          )}
         </div>
 
         {/* Table */}

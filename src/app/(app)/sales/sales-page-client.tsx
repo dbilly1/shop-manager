@@ -56,6 +56,7 @@ interface DailySummary {
   mobile: number
   credit: number
   count: number
+  tax: number
   recon: { cash_variance: number; mobile_variance: number; status: string } | null
 }
 
@@ -1216,17 +1217,34 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
 
                 // One row per SALE — items stacked with <p> tags inside each cell
                 function SalesTable({ sales }: { sales: IndividualSale[] }) {
+                  const hasTaxes = sales.some(s => (s.taxes_snapshot ?? []).some(t => t.amount > 0))
                   return (
-                    <table className="w-full min-w-[740px] text-sm table-fixed">
+                    <table className={`w-full ${hasTaxes ? "min-w-[840px]" : "min-w-[740px]"} text-sm table-fixed`}>
                       <colgroup>
-                        <col style={{ width: "9%" }} />
-                        <col style={{ width: "22%" }} />
-                        <col style={{ width: "10%" }} />
-                        <col style={{ width: "11%" }} />
-                        <col style={{ width: "12%" }} />
-                        <col style={{ width: "11%" }} />
-                        <col style={{ width: "17%" }} />
-                        <col style={{ width: "8%" }} />
+                        {hasTaxes ? (
+                          <>
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "19%" }} />
+                            <col style={{ width: "9%" }} />
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "11%" }} />
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "15%" }} />
+                            <col style={{ width: "8%" }} />
+                          </>
+                        ) : (
+                          <>
+                            <col style={{ width: "9%" }} />
+                            <col style={{ width: "22%" }} />
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "11%" }} />
+                            <col style={{ width: "12%" }} />
+                            <col style={{ width: "11%" }} />
+                            <col style={{ width: "17%" }} />
+                            <col style={{ width: "8%" }} />
+                          </>
+                        )}
                       </colgroup>
                       <thead className="bg-muted/30 border-b">
                         <tr className="text-left text-xs text-muted-foreground">
@@ -1235,6 +1253,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                           <th className="px-3 py-2 font-medium">Qty</th>
                           <th className="px-3 py-2 font-medium text-right">Unit Price</th>
                           <th className="px-3 py-2 font-medium text-right">Amount</th>
+                          {hasTaxes && <th className="px-3 py-2 font-medium text-right">Tax</th>}
                           <th className="px-3 py-2 font-medium">Payment</th>
                           <th className="px-3 py-2 font-medium">Recorded by</th>
                           <th className="px-3 py-2" />
@@ -1288,6 +1307,17 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                               <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top pt-3">
                                 <span className="font-bold">{formatCurrency(sale.total_amount, currency)}</span>
                               </td>
+                              {/* Tax — only rendered when hasTaxes */}
+                              {hasTaxes && (() => {
+                                const taxTotal = (sale.taxes_snapshot ?? []).reduce((s, t) => s + t.amount, 0)
+                                return (
+                                  <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top pt-3">
+                                    {taxTotal > 0
+                                      ? <span className="text-muted-foreground">{formatCurrency(taxTotal, currency)}</span>
+                                      : <span className="text-muted-foreground/30">—</span>}
+                                  </td>
+                                )
+                              })()}
                               {/* Payment */}
                               <td className="px-3 py-2.5 align-top pt-2.5">{paymentBadge(sale.payment_method)}</td>
                               {/* Recorded by */}
@@ -1375,6 +1405,10 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
               <span className="text-xs text-muted-foreground">All sales · click a row to see transactions</span>
             </div>
             <div className="flex-1 overflow-y-auto">
+              {(() => {
+                const showTax = summaries.some(s => s.tax > 0)
+                const colSpanTotal = showTax ? 8 : 7
+                return (
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-background border-b">
                   <tr className="text-left text-xs text-muted-foreground">
@@ -1383,6 +1417,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                     <th className="px-3 py-2 font-medium text-right">Revenue</th>
                     <th className="px-3 py-2 font-medium text-right">Cash</th>
                     <th className="px-3 py-2 font-medium text-right">Mobile</th>
+                    {showTax && <th className="px-3 py-2 font-medium text-right">Tax</th>}
                     <th className="px-6 py-2 font-medium text-right">Reconciliation</th>
                     <th className="w-8" />
                   </tr>
@@ -1390,7 +1425,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                 <tbody className="divide-y">
                   {summaries.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center text-muted-foreground py-16 text-sm">No sales recorded yet</td>
+                      <td colSpan={colSpanTotal} className="text-center text-muted-foreground py-16 text-sm">No sales recorded yet</td>
                     </tr>
                   ) : (
                     pagedSummaries.map((s) => (
@@ -1404,6 +1439,11 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                         <td className="px-3 py-3 text-right font-bold tabular-nums">{formatCurrency(s.total, currency)}</td>
                         <td className="px-3 py-3 text-right text-muted-foreground tabular-nums">{formatCurrency(s.cash, currency)}</td>
                         <td className="px-3 py-3 text-right text-muted-foreground tabular-nums">{formatCurrency(s.mobile, currency)}</td>
+                        {showTax && (
+                          <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                            {s.tax > 0 ? formatCurrency(s.tax, currency) : <span className="text-muted-foreground/30">—</span>}
+                          </td>
+                        )}
                         <td className="px-6 py-3 text-right"><ReconCell recon={s.recon} /></td>
                         <td className="pr-3 py-3 text-muted-foreground"><ChevronRight className="h-4 w-4" /></td>
                       </tr>
@@ -1411,6 +1451,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                   )}
                 </tbody>
               </table>
+                )
+              })()}
             </div>
             <PaginationBar
               page={summaryPage}
