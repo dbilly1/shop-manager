@@ -682,7 +682,7 @@ export function CreditClient({
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
 
       {/* ── Left panel: customer list ── */}
-      <div className={`border-r flex-col md:flex md:w-72 md:shrink-0 ${mobileView === "list" ? "flex flex-1" : "hidden"}`}>
+      <div className={`border-r flex-col md:flex md:w-72 md:shrink-0 md:flex-none ${mobileView === "list" ? "flex flex-1" : "hidden"}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 className="font-semibold text-sm">Customers</h2>
         </div>
