@@ -450,6 +450,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
+  // Mobile panel toggle: "form" = New Sale, "history" = All Sales
+  const [mobilePanel, setMobilePanel] = useState<"form" | "history">("form")
   const [customers, setCustomers] = useState(initialCustomers)
   const [addCustomerOpen, setAddCustomerOpen] = useState(false)
   const [newCustomerName, setNewCustomerName] = useState("")
@@ -632,6 +634,8 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
     setSaleDate(TODAY)
     setLoading(false)
     if (isSalesperson) loadTodaySales()
+    // On mobile, jump to "All Sales" so the user can see the sale they just recorded
+    setMobilePanel("history")
     router.refresh()
   }
 
@@ -864,10 +868,26 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
+
+      {/* ── Mobile tab bar (hidden on desktop) ── */}
+      <div className="md:hidden flex shrink-0 border-b bg-background">
+        <button
+          onClick={() => setMobilePanel("form")}
+          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mobilePanel === "form" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"}`}
+        >
+          New Sale
+        </button>
+        <button
+          onClick={() => setMobilePanel("history")}
+          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mobilePanel === "history" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"}`}
+        >
+          All Sales
+        </button>
+      </div>
 
       {/* ── Left: Sale Entry ── */}
-      <div className="w-[420px] shrink-0 border-r flex flex-col bg-background">
+      <div className={`border-r flex-col bg-background md:flex md:w-[420px] md:shrink-0 ${mobilePanel === "form" ? "flex flex-1 overflow-hidden" : "hidden"}`}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b shrink-0">
@@ -1121,7 +1141,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
       />
 
       {/* ── Right: History ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`flex-col overflow-hidden md:flex md:flex-1 ${mobilePanel === "history" ? "flex flex-1" : "hidden"}`}>
         {isSalesperson ? (
           <>
             <div className="px-6 pt-4 pb-3 border-b shrink-0">

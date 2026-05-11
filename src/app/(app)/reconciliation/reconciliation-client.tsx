@@ -339,18 +339,38 @@ export function ReconciliationClient({
         notes: sess.notes.trim() || null,
       }
 
-      // Upsert — the unique indexes handle direct vs bulk separately
-      const { data: upserted, error } = await supabase
+      // Manual upsert: partial unique indexes (WHERE batch_id IS NULL / IS NOT NULL)
+      // are not supported by PostgREST's ON CONFLICT clause, so we do it explicitly.
+      const baseQ = supabase
         .from("reconciliations")
-        .upsert(payload, {
-          onConflict: sess.batchId
-            ? "shop_id,branch_id,reconciliation_date,batch_id"
-            : "shop_id,branch_id,reconciliation_date",
-        })
-        .select()
-        .single()
+        .select("id")
+        .eq("shop_id", session.shop_id!)
+        .eq("branch_id", branchId)
+        .eq("reconciliation_date", selectedDate)
 
-      if (error) { toast.error(error.message); return }
+      const { data: existingRow } = sess.batchId
+        ? await baseQ.eq("batch_id", sess.batchId).maybeSingle()
+        : await baseQ.is("batch_id", null).maybeSingle()
+
+      let upserted: ReconRecord
+      if (existingRow) {
+        const { data, error } = await supabase
+          .from("reconciliations")
+          .update(payload)
+          .eq("id", existingRow.id)
+          .select()
+          .single()
+        if (error) { toast.error(error.message); return }
+        upserted = data as ReconRecord
+      } else {
+        const { data, error } = await supabase
+          .from("reconciliations")
+          .insert(payload)
+          .select()
+          .single()
+        if (error) { toast.error(error.message); return }
+        upserted = data as ReconRecord
+      }
 
       void logAuditAction({
         branchId,
