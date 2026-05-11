@@ -861,11 +861,11 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
   }
 
   function ReconCell({ recon }: { recon: DailySummary["recon"] }) {
-    if (!recon) return <span className="text-muted-foreground text-xs">Not reconciled</span>
+    if (!recon) return <div className="flex items-center justify-end gap-1 text-muted-foreground text-xs whitespace-nowrap">Not reconciled</div>
     const variance = recon.cash_variance + recon.mobile_variance
-    if (variance === 0) return <span className="text-muted-foreground text-xs flex items-center gap-1"><Minus className="h-3 w-3" />Balanced</span>
-    if (variance > 0) return <span className="text-blue-600 text-xs flex items-center gap-1"><TrendingUp className="h-3 w-3" />+{formatCurrency(variance, currency)}</span>
-    return <span className="text-destructive text-xs flex items-center gap-1"><TrendingDown className="h-3 w-3" />{formatCurrency(variance, currency)}</span>
+    if (variance === 0) return <div className="flex items-center justify-end gap-1 text-muted-foreground text-xs whitespace-nowrap"><Minus className="h-3 w-3 shrink-0" />Balanced</div>
+    if (variance > 0) return <div className="flex items-center justify-end gap-1 text-blue-600 text-xs whitespace-nowrap"><TrendingUp className="h-3 w-3 shrink-0" />+{formatCurrency(variance, currency)}</div>
+    return <div className="flex items-center justify-end gap-1 text-destructive text-xs whitespace-nowrap"><TrendingDown className="h-3 w-3 shrink-0" />{formatCurrency(variance, currency)}</div>
   }
 
   return (
@@ -1418,7 +1418,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                     <th className="px-3 py-2 font-medium text-right">Cash</th>
                     <th className="px-3 py-2 font-medium text-right">Mobile</th>
                     {showTax && <th className="px-3 py-2 font-medium text-right">Tax</th>}
-                    <th className="px-6 py-2 font-medium text-right">Reconciliation</th>
+                    <th className="px-4 py-2 font-medium text-right">Reconciliation</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -1444,7 +1444,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
                             {s.tax > 0 ? formatCurrency(s.tax, currency) : <span className="text-muted-foreground/30">—</span>}
                           </td>
                         )}
-                        <td className="px-6 py-3 text-right"><ReconCell recon={s.recon} /></td>
+                        <td className="px-4 py-3"><ReconCell recon={s.recon} /></td>
                         <td className="pr-3 py-3 text-muted-foreground"><ChevronRight className="h-4 w-4" /></td>
                       </tr>
                     ))
