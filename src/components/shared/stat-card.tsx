@@ -17,7 +17,7 @@ export function StatCard({ title, value, sub, icon, trend, className }: StatCard
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground truncate">{title}</p>
-            <p className="text-2xl font-bold mt-1 truncate">{value}</p>
+            <p className="text-lg md:text-2xl font-bold mt-1 truncate">{value}</p>
             {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
             {trend && (
               <p className={cn("text-xs mt-1", trend.positive ? "text-green-600" : "text-red-600")}>

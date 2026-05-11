@@ -640,54 +640,57 @@ export function ReconciliationClient({
       </div>
 
       {/* ── RIGHT: History table ──────────────────────────────────────────── */}
-      <div className="overflow-y-auto flex flex-col">
+      <div className="flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b shrink-0">
           <h2 className="font-semibold text-sm">Reconciliation History</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Click a row to load into the editor</p>
         </div>
 
-        {saleDateSessions.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-            No sales recorded yet
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-background border-b">
-              <tr className="text-left text-xs text-muted-foreground">
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium text-center">Sessions</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {pagedDates.map(({ date, sessionCount }) => {
-                const dateRecons = reconciliations.filter((r) => r.reconciliation_date === date)
-                const { label, color } = computeHistoryStatus(dateRecons, sessionCount)
-                const isSelected = date === selectedDate
-                return (
-                  <tr
-                    key={date}
-                    onClick={() => setSelectedDate(date)}
-                    className={`cursor-pointer transition-colors ${isSelected ? "bg-primary/10" : "hover:bg-muted/40"}`}
-                  >
-                    <td className="px-6 py-3 font-medium whitespace-nowrap">
-                      {formatDateLabel(date)}
-                      {date === today && (
-                        <span className="ml-2 text-xs bg-primary/15 text-primary rounded px-1.5 py-0.5">Today</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center text-muted-foreground">{sessionCount}</td>
-                    <td className={`px-4 py-3 font-medium text-sm ${color}`}>{label}</td>
-                    <td className="pr-4 py-3 text-muted-foreground">
-                      <ChevronRight className="h-4 w-4" />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+        <div className="flex-1 overflow-y-auto">
+          {saleDateSessions.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+              No sales recorded yet
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-background border-b">
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="px-6 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium text-center">Sessions</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {pagedDates.map(({ date, sessionCount }) => {
+                  const dateRecons = reconciliations.filter((r) => r.reconciliation_date === date)
+                  const { label, color } = computeHistoryStatus(dateRecons, sessionCount)
+                  const isSelected = date === selectedDate
+                  return (
+                    <tr
+                      key={date}
+                      onClick={() => setSelectedDate(date)}
+                      className={`cursor-pointer transition-colors ${isSelected ? "bg-primary/10" : "hover:bg-muted/40"}`}
+                    >
+                      <td className="px-6 py-3 font-medium whitespace-nowrap">
+                        {formatDateLabel(date)}
+                        {date === today && (
+                          <span className="ml-2 text-xs bg-primary/15 text-primary rounded px-1.5 py-0.5">Today</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">{sessionCount}</td>
+                      <td className={`px-4 py-3 font-medium text-sm ${color}`}>{label}</td>
+                      <td className="pr-4 py-3 text-muted-foreground">
+                        <ChevronRight className="h-4 w-4" />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
         <PaginationBar
           page={datePage}
           totalPages={dateTotalPages}

@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { usePagination } from "@/hooks/usePagination";
-import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -366,18 +364,6 @@ export function InventoryClient({
     }
   }, [baseProducts, search, sortKey]);
 
-  // ─── Inventory pagination ────────────────────────────────────────
-  const {
-    paginatedData: invPage,
-    page: invCurrentPage,
-    setPage: setInvPage,
-    pageSize: invPageSize,
-    setPageSize: setInvPageSize,
-    totalPages: invTotalPages,
-    totalItems: invTotalItems,
-    startIndex: invStart,
-    endIndex: invEnd,
-  } = usePagination(filtered);
 
   // ─── Product dialog helpers ──────────────────────────────────────
   function handleScan(code: string) {
@@ -1047,7 +1033,7 @@ export function InventoryClient({
                   </td>
                 </tr>
               ) : (
-                invPage.map((bp) => {
+                filtered.map((bp) => {
                   if (!bp.product) return null;
                   const price = bp.override_price ?? bp.product.base_price;
                   const { text: stockText, low, out } = stockDisplay(bp);
@@ -1160,17 +1146,6 @@ export function InventoryClient({
               )}
             </tbody>
           </table>
-          <PaginationBar
-            page={invCurrentPage}
-            totalPages={invTotalPages}
-            totalItems={invTotalItems}
-            pageSize={invPageSize}
-            startIndex={invStart}
-            endIndex={invEnd}
-            onPageChange={setInvPage}
-            onPageSizeChange={setInvPageSize}
-            label="product"
-          />
         </div>
       </div>
 

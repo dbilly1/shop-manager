@@ -140,8 +140,8 @@ export function CustomersClient({
         />
       </div>
 
-      <div className="border rounded overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="border rounded overflow-hidden flex flex-col max-h-[calc(100vh-14rem)]">
+        <div className="overflow-auto flex-1">
         <table className="w-full min-w-[480px] text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>

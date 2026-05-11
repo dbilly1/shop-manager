@@ -278,7 +278,7 @@ export function ExpensesClient({
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
       {/* ── Left sidebar ─────────────────────────────────────────────────────── */}
       <aside className="flex flex-col gap-4">
         {/* Last 30 days card */}
@@ -295,7 +295,7 @@ export function ExpensesClient({
         </div>
 
         {/* By category card */}
-        <div className="bg-card rounded border p-4 flex-1">
+        <div className="bg-card rounded border p-4">
           <p className="text-sm font-semibold mb-3">
             By Category
           </p>
@@ -330,13 +330,14 @@ export function ExpensesClient({
       </aside>
 
       {/* ── Right table ──────────────────────────────────────────────────────── */}
-      <main className="col-span-1 lg:col-span-3 bg-card rounded border overflow-x-auto">
+      <main className="col-span-1 lg:col-span-3 bg-card rounded border flex flex-col max-h-[calc(100vh-12rem)]">
         {/* Header */}
-        <div className="px-5 py-4 border-b">
+        <div className="px-5 py-4 border-b shrink-0">
           <h2 className="text-base font-semibold">Expenses</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{expenses.length} total</p>
         </div>
 
+        <div className="overflow-auto flex-1">
         {expenses.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
             No expenses recorded yet
@@ -417,6 +418,7 @@ export function ExpensesClient({
             </tbody>
           </table>
         )}
+        </div>
         <PaginationBar
           page={currentPage}
           totalPages={totalPages}

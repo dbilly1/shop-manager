@@ -41,9 +41,19 @@ export default async function CreditPage() {
   const { data: creditSales } = await csQuery
   const { data: shop } = await supabase.from("shops").select("currency, credit_overdue_days").eq("id", session.shop_id!).single()
 
+  // All payments — needed for the overview table (loaded per-customer lazily in the ledger view)
+  const paymentsQuery = supabase
+    .from("credit_payments")
+    .select("id, customer_id, amount, payment_method, payment_date, notes, customer:customers(name)")
+    .eq("shop_id", session.shop_id!)
+    .order("payment_date", { ascending: false })
+  if (activeBranchId) paymentsQuery.eq("branch_id", activeBranchId)
+  const { data: allPayments } = await paymentsQuery
+
   return (
     <CreditClient
       creditSales={creditSales ?? []}
+      allPayments={(allPayments ?? []) as unknown as { id: string; customer_id: string; amount: number; payment_method: string; payment_date: string; notes: string | null; customer: { name: string } | null }[]}
       currency={shop?.currency ?? "USD"}
       overdueThreshold={shop?.credit_overdue_days ?? 30}
       session={session}

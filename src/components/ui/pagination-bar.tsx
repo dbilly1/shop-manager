@@ -11,13 +11,6 @@ import {
 
 // ─── Page number helpers ──────────────────────────────────────────────────────
 
-/**
- * Returns the list of page-number tokens to display.
- * Numbers are page indices; `"..."` is an ellipsis gap.
- *
- * Example (page 6 of 15):  [1, "...", 5, 6, 7, "...", 15]
- * Example (5 total pages):  [1, 2, 3, 4, 5]
- */
 function getPageTokens(page: number, totalPages: number): (number | "...")[] {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -39,28 +32,15 @@ function getPageTokens(page: number, totalPages: number): (number | "...")[] {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface PaginationBarProps {
-  /** Current 1-based page number */
   page: number
-  /** Total number of pages */
   totalPages: number
-  /** Total items across all pages */
   totalItems: number
-  /** Items shown per page */
   pageSize: number
-  /** 1-based index of the first visible item (0 when empty) */
   startIndex: number
-  /** 1-based index of the last visible item */
   endIndex: number
-  /** Called when the user picks a new page */
   onPageChange: (page: number) => void
-  /** Called when the user picks a new page size */
   onPageSizeChange: (size: number) => void
-  /**
-   * Singular noun for the items being paginated.
-   * Defaults to "record".  Used in "Showing 1–25 of 312 sales".
-   */
   label?: string
-  /** Available page-size options. Defaults to [25, 50, 100]. */
   pageSizeOptions?: number[]
   className?: string
 }
@@ -84,8 +64,6 @@ export function PaginationBar({
 
   const tokens = getPageTokens(page, totalPages)
 
-  // Plural label: "sale" → "sales", "entry" → "entries", etc.
-  // Simple heuristic — works for all labels used in this app.
   const pluralLabel =
     totalItems === 1
       ? label
@@ -95,97 +73,95 @@ export function PaginationBar({
       ? label
       : label + "s"
 
+  // Capitalise first letter for the "per page" label
+  const perPageLabel = pluralLabel.charAt(0).toUpperCase() + pluralLabel.slice(1)
+
   return (
     <div
-      className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t text-sm w-full ${className}`}
+      className={`grid grid-cols-3 items-center gap-2 px-4 py-3 border-t text-sm w-full bg-background ${className}`}
     >
-      {/* ── Left: summary + page-size selector ─────────────────────────────── */}
-      <div className="flex items-center gap-3 text-muted-foreground">
-        <span>
-          Showing{" "}
-          <span className="font-medium text-foreground tabular-nums">
-            {startIndex}–{endIndex}
-          </span>{" "}
-          of{" "}
-          <span className="font-medium text-foreground tabular-nums">
-            {totalItems}
-          </span>{" "}
-          {pluralLabel}
-        </span>
+      {/* ── Left: showing text ─────────────────────────────────────────────── */}
+      <p className="text-xs text-muted-foreground whitespace-nowrap hidden sm:block">
+        Showing{" "}
+        <span className="font-medium text-foreground tabular-nums">{startIndex}–{endIndex}</span>
+        {" "}of{" "}
+        <span className="font-medium text-foreground tabular-nums">{totalItems}</span>
+      </p>
+      {/* On mobile, take up space so center stays centered */}
+      <span className="sm:hidden" />
 
+      {/* ── Center: prev · numbers · next ──────────────────────────────────── */}
+      <div className="flex items-center justify-center gap-1">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page === 1}
+          aria-label="Previous page"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground
+                     hover:bg-muted hover:text-foreground transition-colors
+                     disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+
+        {tokens.map((token, i) =>
+          token === "..." ? (
+            <span
+              key={`ellipsis-${i}`}
+              className="inline-flex items-center justify-center w-7 h-7 text-muted-foreground select-none text-xs"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={token}
+              onClick={() => onPageChange(token)}
+              aria-label={`Page ${token}`}
+              aria-current={token === page ? "page" : undefined}
+              className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-xs font-medium transition-colors
+                          ${
+                            token === page
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`}
+            >
+              {token}
+            </button>
+          ),
+        )}
+
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page === totalPages}
+          aria-label="Next page"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground
+                     hover:bg-muted hover:text-foreground transition-colors
+                     disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* ── Right: per-page selector ────────────────────────────────────────── */}
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:block">
+          {perPageLabel} per page
+        </span>
         <Select
           value={String(pageSize)}
           onValueChange={(v) => onPageSizeChange(Number(v))}
         >
-          <SelectTrigger className="h-7 w-[70px] text-xs">
+          <SelectTrigger className="h-7 w-[60px] text-xs">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="end">
             {pageSizeOptions.map((s) => (
               <SelectItem key={s} value={String(s)} className="text-xs">
-                {s} / page
+                {s}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-
-      {/* ── Right: prev · numbers · next ────────────────────────────────────── */}
-      {totalPages > 1 && (
-        <div className="flex items-center gap-1">
-          {/* Prev */}
-          <button
-            onClick={() => onPageChange(page - 1)}
-            disabled={page === 1}
-            aria-label="Previous page"
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md border text-muted-foreground
-                       hover:bg-muted hover:text-foreground transition-colors
-                       disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Page tokens */}
-          {tokens.map((token, i) =>
-            token === "..." ? (
-              <span
-                key={`ellipsis-${i}`}
-                className="inline-flex items-center justify-center w-7 h-7 text-muted-foreground select-none text-xs"
-              >
-                …
-              </span>
-            ) : (
-              <button
-                key={token}
-                onClick={() => onPageChange(token)}
-                aria-label={`Page ${token}`}
-                aria-current={token === page ? "page" : undefined}
-                className={`inline-flex items-center justify-center w-7 h-7 rounded-md border text-xs font-medium
-                            transition-colors
-                            ${
-                              token === page
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            }`}
-              >
-                {token}
-              </button>
-            ),
-          )}
-
-          {/* Next */}
-          <button
-            onClick={() => onPageChange(page + 1)}
-            disabled={page === totalPages}
-            aria-label="Next page"
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md border text-muted-foreground
-                       hover:bg-muted hover:text-foreground transition-colors
-                       disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

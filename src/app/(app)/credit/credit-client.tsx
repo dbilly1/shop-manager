@@ -25,18 +25,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatDate } from "@/utils/format";
 import { toast } from "sonner";
 import {
-  User,
   Phone,
   Wallet,
   Pencil,
   Trash2,
   Loader2,
   CreditCard,
-  TrendingDown,
-  CheckCircle2,
-  ArrowDownLeft,
   ChevronDown,
-  ShoppingCart,
   Store,
   ArrowLeft,
   Search,
@@ -87,8 +82,19 @@ interface CreditPayment {
   received_at_shop: boolean;
 }
 
+interface AllPaymentRow {
+  id: string;
+  customer_id: string;
+  amount: number;
+  payment_method: string;
+  payment_date: string;
+  notes: string | null;
+  customer: { name: string } | null;
+}
+
 interface Props {
   creditSales: CreditSaleRow[];
+  allPayments: AllPaymentRow[];
   currency: string;
   overdueThreshold: number;
   session: SessionContext;
@@ -165,6 +171,7 @@ function methodLabel(method: string): string {
 
 export function CreditClient({
   creditSales,
+  allPayments,
   currency,
   overdueThreshold,
   session,
@@ -175,9 +182,12 @@ export function CreditClient({
   // ── Selection + expand ────────────────────────────────────────────────────
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [overviewExpandedId, setOverviewExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   // Mobile: "list" shows customer panel full-screen; "detail" shows ledger panel
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  // Mobile tab within the "list" view
+  const [mobileTab, setMobileTab] = useState<"customers" | "overview">("customers");
 
   // ── Record payment dialog ─────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
@@ -259,6 +269,57 @@ export function CreditClient({
     () => allGroups.find((g) => g.customerId === selectedCustomerId) ?? null,
     [allGroups, selectedCustomerId],
   );
+
+  // ─── Portfolio summary (overview cards) ───────────────────────────────────
+  const portfolioStats = useMemo(() => {
+    const totalOutstanding = allGroups.reduce((s, g) => s + g.outstanding, 0);
+    const totalOwed       = allGroups.reduce((s, g) => s + g.totalOwed, 0);
+    const totalCollected  = allGroups.reduce((s, g) => s + g.totalPaid, 0);
+    const overdueCount    = owingGroups.filter((g) => isOverdue(g)).length;
+    return { totalOutstanding, totalOwed, totalCollected, overdueCount, customerCount: owingGroups.length };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allGroups, owingGroups]);
+
+  // ─── All-customer combined transaction list (overview table) ─────────────
+  type OverviewEntry =
+    | { kind: "sale";    id: string; customerId: string; customerName: string; date: string; amount: number; description: string }
+    | { kind: "payment"; id: string; customerId: string; customerName: string; date: string; amount: number; method: string };
+
+  const overviewEntries = useMemo<OverviewEntry[]>(() => {
+    const entries: OverviewEntry[] = [
+      ...creditSales.map((s) => ({
+        kind: "sale" as const,
+        id: s.id,
+        customerId: s.customer_id,
+        customerName: s.customer?.name ?? "Unknown",
+        date: s.sale?.sale_date ?? s.created_at.slice(0, 10),
+        amount: s.amount_owed,
+        description: saleDescription(s.sale?.sale_items ?? []),
+      })),
+      ...allPayments.map((p) => ({
+        kind: "payment" as const,
+        id: p.id,
+        customerId: p.customer_id,
+        customerName: p.customer?.name ?? "Unknown",
+        date: p.payment_date,
+        amount: p.amount,
+        method: p.payment_method,
+      })),
+    ];
+    return entries.sort((a, b) => b.date.localeCompare(a.date));
+  }, [creditSales, allPayments]);
+
+  const {
+    paginatedData: overviewPage,
+    page: overviewCurrentPage,
+    setPage: setOverviewPage,
+    pageSize: overviewPageSize,
+    setPageSize: setOverviewPageSize,
+    totalPages: overviewTotalPages,
+    totalItems: overviewTotalItems,
+    startIndex: overviewStart,
+    endIndex: overviewEnd,
+  } = usePagination(overviewEntries);
 
   // ─── Build chronological ledger ───────────────────────────────────────────
   const ledger = useMemo<LedgerEntry[]>(() => {
@@ -681,62 +742,278 @@ export function CreditClient({
     );
   }
 
+  // ─── Overview panel (shared by desktop right panel + mobile Overview tab) ──
+  const overviewPanel = (
+    <>
+      {/* Portfolio summary cards */}
+      <div className="px-4 md:px-6 py-5 border-b shrink-0">
+        <h2 className="font-semibold text-base mb-4">Credit Overview</h2>
+        <div className={`grid gap-3 ${portfolioStats.overdueCount > 0 ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-3"}`}>
+          <div className="rounded-lg border bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Total Outstanding</p>
+            <p className="font-bold text-lg tabular-nums text-red-700 dark:text-red-400">
+              {formatCurrency(portfolioStats.totalOutstanding, currency)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {portfolioStats.customerCount} customer{portfolioStats.customerCount !== 1 ? "s" : ""} owing
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Total Credit Extended</p>
+            <p className="font-bold text-lg tabular-nums">{formatCurrency(portfolioStats.totalOwed, currency)}</p>
+          </div>
+          <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Total Collected</p>
+            <p className="font-bold text-lg tabular-nums text-green-700 dark:text-green-500">
+              {formatCurrency(portfolioStats.totalCollected, currency)}
+            </p>
+          </div>
+          {portfolioStats.overdueCount > 0 && (
+            <div className="rounded-lg border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 px-4 py-3">
+              <p className="text-xs text-muted-foreground mb-1">Overdue Customers</p>
+              <p className="font-bold text-lg tabular-nums text-orange-700 dark:text-orange-400">
+                {portfolioStats.overdueCount}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">past {overdueThreshold} days</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* All transactions table */}
+      <div className="flex-1 overflow-y-auto">
+        {overviewEntries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm gap-2">
+            <CreditCard className="size-8 opacity-30" />
+            No transactions yet
+          </div>
+        ) : (
+          <>
+            <div className="px-6 py-3 border-b shrink-0">
+              <h3 className="text-sm font-semibold">All Transactions</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[580px]">
+                <thead className="sticky top-0 bg-background border-b z-10">
+                  <tr className="text-xs text-muted-foreground">
+                    <th className="px-5 py-3 text-left font-medium">Date</th>
+                    <th className="px-3 py-3 text-left font-medium">Customer</th>
+                    <th className="px-3 py-3 text-left font-medium">Type</th>
+                    <th className="px-3 py-3 text-left font-medium">Description</th>
+                    <th className="px-5 py-3 text-right font-medium">Amount</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {overviewPage.map((entry) => {
+                    const isExpanded = overviewExpandedId === entry.id;
+                    const fullSale = entry.kind === "sale"
+                      ? creditSales.find((s) => s.id === entry.id) ?? null
+                      : null;
+                    const fullPayment = entry.kind === "payment"
+                      ? allPayments.find((p) => p.id === entry.id) ?? null
+                      : null;
+                    return (
+                      <Fragment key={entry.id}>
+                        <tr
+                          className="hover:bg-muted/40 cursor-pointer transition-colors"
+                          onClick={() => setOverviewExpandedId(isExpanded ? null : entry.id)}
+                        >
+                          <td className="px-5 py-3 whitespace-nowrap text-muted-foreground text-xs">
+                            {formatDate(entry.date)}
+                          </td>
+                          <td className="px-3 py-3 text-sm font-medium">{entry.customerName}</td>
+                          <td className="px-3 py-3">
+                            {entry.kind === "sale" ? (
+                              <span className="inline-flex rounded-md border px-2 py-0.5 text-xs font-medium bg-background text-foreground">Sale</span>
+                            ) : (
+                              <span className="inline-flex rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Payment</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-muted-foreground">
+                            {entry.kind === "sale" ? entry.description : methodLabel(entry.method)}
+                          </td>
+                          <td className="px-5 py-3 text-right tabular-nums font-medium">
+                            {entry.kind === "sale" ? (
+                              <span className="text-red-600">{formatCurrency(entry.amount, currency)}</span>
+                            ) : (
+                              <span className="text-green-700">{formatCurrency(entry.amount, currency)}</span>
+                            )}
+                          </td>
+                          <td className="pr-4 py-3 text-right">
+                            <ChevronDown className={`size-4 text-muted-foreground ml-auto transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                          </td>
+                        </tr>
+
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={6} className="bg-muted/30 px-8 py-4 border-b">
+                              {entry.kind === "sale" && fullSale ? (
+                                <>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Items in this sale</p>
+                                  {(fullSale.sale?.sale_items ?? []).length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">No item details available</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-muted-foreground border-b">
+                                          <th className="text-left pb-2 font-medium">Product</th>
+                                          <th className="text-left pb-2 font-medium">Qty</th>
+                                          <th className="text-right pb-2 font-medium">Unit Price</th>
+                                          <th className="text-right pb-2 font-medium">Discount</th>
+                                          <th className="text-right pb-2 font-medium">Line Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-border/50">
+                                        {(fullSale.sale?.sale_items ?? []).map((item) => (
+                                          <tr key={item.id}>
+                                            <td className="py-2 font-medium pr-4">{item.product?.name ?? "—"}</td>
+                                            <td className="py-2 text-muted-foreground">{formatQty(item)}</td>
+                                            <td className="py-2 text-right tabular-nums">{formatCurrency(item.unit_price, currency)}</td>
+                                            <td className="py-2 text-right tabular-nums text-muted-foreground">
+                                              {item.discount_amount > 0 ? formatCurrency(item.discount_amount, currency) : "—"}
+                                            </td>
+                                            <td className="py-2 text-right tabular-nums font-semibold">{formatCurrency(item.line_total, currency)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  {fullSale.sale?.recorded_by_name && (
+                                    <p className="text-xs text-muted-foreground mt-3">Recorded by {fullSale.sale.recorded_by_name}</p>
+                                  )}
+                                </>
+                              ) : entry.kind === "payment" && fullPayment ? (
+                                <>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Payment details</p>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-muted-foreground border-b">
+                                        <th className="text-left pb-2 font-medium">Method</th>
+                                        <th className="text-left pb-2 font-medium">Date</th>
+                                        <th className="text-right pb-2 font-medium">Amount</th>
+                                        <th className="text-right pb-2 font-medium">Notes</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr>
+                                        <td className="py-2 font-medium pr-4">{methodLabel(fullPayment.payment_method)}</td>
+                                        <td className="py-2 text-muted-foreground">{formatDate(fullPayment.payment_date)}</td>
+                                        <td className="py-2 text-right tabular-nums font-semibold text-green-700">{formatCurrency(fullPayment.amount, currency)}</td>
+                                        <td className="py-2 text-right text-muted-foreground">{fullPayment.notes ?? "—"}</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </>
+                              ) : null}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      <PaginationBar
+        page={overviewCurrentPage}
+        totalPages={overviewTotalPages}
+        totalItems={overviewTotalItems}
+        pageSize={overviewPageSize}
+        startIndex={overviewStart}
+        endIndex={overviewEnd}
+        onPageChange={setOverviewPage}
+        onPageSizeChange={setOverviewPageSize}
+        label="transaction"
+      />
+    </>
+  );
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -m-4 md:-m-6">
 
       {/* ── Left panel: customer list ── */}
       <div className={`border-r flex-col md:flex md:w-72 md:shrink-0 md:flex-none ${mobileView === "list" ? "flex flex-1" : "hidden"}`}>
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+
+        {/* Mobile-only tab strip */}
+        <div className="md:hidden flex border-b shrink-0">
+          {(["customers", "overview"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setMobileTab(tab)}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors capitalize ${
+                mobileTab === tab
+                  ? "text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab === "customers" ? "Customers" : "Overview"}
+            </button>
+          ))}
+        </div>
+
+        {/* Desktop header */}
+        <div className="hidden md:flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 className="font-semibold text-sm">Customers</h2>
         </div>
 
-        {/* Search */}
-        <div className="px-3 py-2 border-b shrink-0">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search by name or phone…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border bg-muted/30 focus:outline-none focus:border-primary/50 focus:bg-background transition-colors"
-            />
+        {/* ── Customer list: always on desktop; mobile only when tab=customers ── */}
+        <div className={`flex-col flex-1 min-h-0 ${mobileTab === "customers" ? "flex" : "hidden md:flex"}`}>
+          {/* Search */}
+          <div className="px-3 py-2 border-b shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by name or phone…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border bg-muted/30 focus:outline-none focus:border-primary/50 focus:bg-background transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {owingGroups.length === 0 && settledGroups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-xs text-center px-4">
+                <CreditCard className="size-8 mb-2 opacity-40" />
+                {searchQuery ? "No customers match your search" : "No credit records found"}
+              </div>
+            ) : (
+              <>
+                {owingGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
+                {settledGroups.length > 0 && (
+                  <>
+                    <div className="px-1 pt-3 pb-1">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Settled</span>
+                      <div className="mt-1 h-px bg-border" />
+                    </div>
+                    {settledGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-          {owingGroups.length === 0 && settledGroups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-xs text-center px-4">
-              <CreditCard className="size-8 mb-2 opacity-40" />
-              {searchQuery ? "No customers match your search" : "No credit records found"}
-            </div>
-          ) : (
-            <>
-              {/* Owing customers */}
-              {owingGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
-
-              {/* Settled customers — shown below with a divider */}
-              {settledGroups.length > 0 && (
-                <>
-                  <div className="px-1 pt-3 pb-1">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Settled</span>
-                    <div className="mt-1 h-px bg-border" />
-                  </div>
-                  {settledGroups.map((group) => <CustomerCard key={group.customerId} group={group} />)}
-                </>
-              )}
-            </>
-          )}
-        </div>
+        {/* ── Overview: mobile only, when tab=overview ── */}
+        {mobileTab === "overview" && (
+          <div className="md:hidden flex flex-col flex-1 overflow-hidden">
+            {overviewPanel}
+          </div>
+        )}
       </div>
 
-      {/* ── Right panel: ledger ── */}
+      {/* ── Right panel: overview or ledger ── */}
       <div className={`flex-col overflow-hidden md:flex md:flex-1 ${mobileView === "detail" ? "flex flex-1" : "hidden"}`}>
         {!selectedGroup ? (
-          <div className="hidden md:flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
-            <User className="size-12 opacity-30" />
-            <p className="text-sm">Select a customer to view their credit history</p>
+          <div className="hidden md:flex flex-col h-full overflow-hidden">
+            {overviewPanel}
           </div>
         ) : (
           <>
@@ -765,16 +1042,12 @@ export function CreditClient({
                   <Button size="sm" variant="ghost" onClick={openEditCustomer} aria-label="Edit customer">
                     <Pencil className="size-3.5" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleteCustOpen(true)}
-                    className="text-destructive hover:text-destructive" aria-label="Delete customer">
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                  <Button size="sm" onClick={() => {
+                  <Button onClick={() => {
                     setPayAmount(""); setPayDate(todayIso());
                     setPayMethod("cash"); setPayNotes(""); setPayReceivedAtShop(true);
                     setPayOpen(true);
                   }} aria-label="Record Payment">
-                    <Wallet className="size-3.5 md:mr-1.5" />
+                    <Wallet className="size-4 md:mr-1.5" />
                     <span className="hidden md:inline">Record Payment</span>
                   </Button>
                 </div>
