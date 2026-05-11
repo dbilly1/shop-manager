@@ -354,13 +354,18 @@ export function ReconciliationClient({
 
       let upserted: ReconRecord
       if (existingRow) {
-        const { data, error } = await supabase
+        const { error: updateError } = await supabase
           .from("reconciliations")
           .update(payload)
           .eq("id", existingRow.id)
+        if (updateError) { toast.error(updateError.message); return }
+
+        const { data, error: fetchError } = await supabase
+          .from("reconciliations")
           .select()
+          .eq("id", existingRow.id)
           .single()
-        if (error) { toast.error(error.message); return }
+        if (fetchError) { toast.error(fetchError.message); return }
         upserted = data as ReconRecord
       } else {
         const { data, error } = await supabase
