@@ -994,7 +994,7 @@ export function InventoryClient({
       {/* ── Products Table ── */}
       <div className="border rounded overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm table-fixed">
+          <table className="w-full min-w-[760px] text-sm table-fixed">
             <colgroup>
               <col className="w-[22%]" />
               <col className="w-[13%]" />

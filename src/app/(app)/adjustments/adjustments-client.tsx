@@ -299,7 +299,7 @@ export function AdjustmentsClient({
       {/* Table */}
       <div className="border rounded overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm table-fixed">
+          <table className="w-full min-w-[720px] text-sm table-fixed">
             <colgroup>
               <col className="w-[18%]" />
               <col className="w-[14%]" />
