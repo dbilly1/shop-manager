@@ -887,7 +887,7 @@ export function SalesPageClient({ summaries, branchProducts, customers: initialC
       </div>
 
       {/* ── Left: Sale Entry ── */}
-      <div className={`border-r flex-col bg-background md:flex md:w-[420px] md:shrink-0 ${mobilePanel === "form" ? "flex flex-1 overflow-hidden" : "hidden"}`}>
+      <div className={`border-r flex-col bg-background md:flex md:w-[420px] md:shrink-0 md:flex-none md:overflow-hidden ${mobilePanel === "form" ? "flex flex-1 overflow-hidden" : "hidden"}`}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b shrink-0">

@@ -723,6 +723,19 @@ create policy "reconciliations_write" on public.reconciliations for insert
       branch_id = public.get_my_branch_id()
     ) and get_my_role() in ('owner','general_manager','general_supervisor','branch_manager','branch_supervisor')
   );
+create policy "reconciliations_update" on public.reconciliations for update
+  using (
+    shop_id = public.get_my_shop_id() and (
+      public.can_access_all_branches() or
+      branch_id = public.get_my_branch_id()
+    )
+  )
+  with check (
+    shop_id = public.get_my_shop_id() and (
+      public.can_access_all_branches() or
+      branch_id = public.get_my_branch_id()
+    ) and get_my_role() in ('owner','general_manager','general_supervisor','branch_manager','branch_supervisor')
+  );
 
 -- Alerts
 create policy "alerts_read" on public.alerts for select
