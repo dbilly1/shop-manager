@@ -16,9 +16,10 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency } from "@/utils/format"
-import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt, Percent, X } from "lucide-react"
+import { Loader2, Plus, Building2, RotateCcw, ShieldCheck, Receipt, Percent, X, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import type { SessionContext, Shop } from "@/types"
+import { transactionalReset, fullReset } from "./actions"
 import { ReceiptPreview, type ReceiptConfig, type ReceiptSaleData } from "@/components/receipt/receipt-preview"
 import { RolesTab } from "./roles-tab"
 
@@ -55,6 +56,14 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [upgrading, setUpgrading] = useState<string | null>(null)
+
+  // Danger zone
+  const [txResetOpen, setTxResetOpen] = useState(false)
+  const [txResetConfirm, setTxResetConfirm] = useState("")
+  const [txResetLoading, setTxResetLoading] = useState(false)
+  const [fullResetOpen, setFullResetOpen] = useState(false)
+  const [fullResetConfirm, setFullResetConfirm] = useState("")
+  const [fullResetLoading, setFullResetLoading] = useState(false)
 
   // Security / change password
   const [currentPassword, setCurrentPassword] = useState("")
@@ -257,6 +266,38 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
     }
   }
 
+  async function handleTransactionalReset() {
+    if (!shop || txResetConfirm !== shop.name) return
+    setTxResetLoading(true)
+    try {
+      await transactionalReset(session.shop_id!)
+      toast.success("Transactional data cleared successfully")
+      setTxResetOpen(false)
+      setTxResetConfirm("")
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setTxResetLoading(false)
+    }
+  }
+
+  async function handleFullReset() {
+    if (!shop || fullResetConfirm !== shop.name) return
+    setFullResetLoading(true)
+    try {
+      await fullReset(session.shop_id!)
+      toast.success("Shop has been fully reset")
+      setFullResetOpen(false)
+      setFullResetConfirm("")
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setFullResetLoading(false)
+    }
+  }
+
   return (
     <div className="-m-4 md:-m-6">
 
@@ -265,17 +306,26 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
         {/* ── Sticky tab bar ── */}
         <div className="sticky -top-4 md:-top-6 z-20 bg-background border-b border-border">
           <div className="flex gap-1 px-4 md:px-6 overflow-x-auto scrollbar-none">
-            {(["general", "branches", "roles", "taxes", "receipt", "billing", "security"] as const).map((tab) => (
+            {([...(["general", "branches", "roles", "taxes", "receipt", "billing", "security"] as const), ...(canEditSettings ? (["danger"] as const) : [])] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-3 py-3 text-sm font-medium border-b-2 transition-colors -mb-px capitalize whitespace-nowrap shrink-0 ${
                   activeTab === tab
-                    ? "border-primary text-primary"
+                    ? tab === "danger"
+                      ? "border-destructive text-destructive"
+                      : "border-primary text-primary"
+                    : tab === "danger"
+                    ? "border-transparent text-destructive/70 hover:text-destructive"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {tab}
+                {tab === "danger" ? (
+                  <span className="flex items-center gap-1.5">
+                    <TriangleAlert className="size-3.5" />
+                    Danger Zone
+                  </span>
+                ) : tab}
               </button>
             ))}
           </div>
@@ -737,7 +787,179 @@ export function SettingsClient({ shop, branches, subscription, allPlans, usage, 
           </Card>
         </TabsContent>
 
+        {/* ── Danger Zone ── */}
+        {canEditSettings && (
+          <TabsContent value="danger" className="space-y-4 mt-0 px-4 md:px-6 py-6 max-w-2xl">
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-5 py-4 flex items-start gap-3">
+              <TriangleAlert className="size-5 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">
+                Actions in this section are <strong>permanent and irreversible</strong>. There is no undo. Proceed only if you are absolutely sure.
+              </p>
+            </div>
+
+            {/* Transactional Reset */}
+            <Card className="border-destructive/30">
+              <CardHeader>
+                <CardTitle className="text-sm">Transactional Reset</CardTitle>
+                <CardDescription>
+                  Wipes all operational data while keeping your shop structure intact.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-foreground mb-2">What gets deleted:</p>
+                  <ul className="space-y-1 text-muted-foreground list-disc list-inside">
+                    <li>All sales and sale line items</li>
+                    <li>All credit records and payment history</li>
+                    <li>All reconciliations</li>
+                    <li>All expenses</li>
+                    <li>All stock adjustments, restocks, and transfers</li>
+                    <li>All stock audit records</li>
+                    <li>Stock levels reset to zero on all products</li>
+                  </ul>
+                  <p className="font-medium text-foreground mt-3 mb-2">What is kept:</p>
+                  <ul className="space-y-1 text-muted-foreground list-disc list-inside">
+                    <li>Shop settings and branches</li>
+                    <li>Staff accounts and roles</li>
+                    <li>Product catalogue</li>
+                    <li>Customer list</li>
+                    <li>Audit log (a reset entry will be recorded)</li>
+                  </ul>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full sm:w-auto"
+                  onClick={() => { setTxResetConfirm(""); setTxResetOpen(true) }}
+                >
+                  Reset Transactional Data…
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Full Reset */}
+            <Card className="border-destructive/60 bg-destructive/5">
+              <CardHeader>
+                <CardTitle className="text-sm text-destructive">Full Reset</CardTitle>
+                <CardDescription>
+                  Returns the shop to the state it was in immediately after initial setup.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-foreground mb-2">Everything in Transactional Reset, plus:</p>
+                  <ul className="space-y-1 text-muted-foreground list-disc list-inside">
+                    <li>All customers are deleted</li>
+                    <li>The entire audit log is wiped</li>
+                  </ul>
+                  <p className="font-medium text-foreground mt-3 mb-2">What is kept:</p>
+                  <ul className="space-y-1 text-muted-foreground list-disc list-inside">
+                    <li>Shop settings and branches</li>
+                    <li>Staff accounts and roles</li>
+                    <li>Product catalogue (stock reset to zero)</li>
+                  </ul>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full sm:w-auto"
+                  onClick={() => { setFullResetConfirm(""); setFullResetOpen(true) }}
+                >
+                  Full Reset…
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
       </Tabs>
+
+      {/* ── Transactional Reset Dialog ── */}
+      <Dialog open={txResetOpen} onOpenChange={(o) => { if (!o) { setTxResetOpen(false); setTxResetConfirm("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="size-4" />
+              Reset Transactional Data?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete all sales, credit records, reconciliations, expenses, and stock movements.
+              Stock levels will be set to zero. <strong className="text-foreground">This cannot be undone.</strong>
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-confirm">
+                Type <span className="font-semibold text-foreground">{shop?.name}</span> to confirm
+              </Label>
+              <Input
+                id="tx-confirm"
+                value={txResetConfirm}
+                onChange={(e) => setTxResetConfirm(e.target.value)}
+                placeholder={shop?.name ?? ""}
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setTxResetOpen(false); setTxResetConfirm("") }} disabled={txResetLoading}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={txResetConfirm !== shop?.name || txResetLoading}
+                onClick={handleTransactionalReset}
+              >
+                {txResetLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Reset Now
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Full Reset Dialog ── */}
+      <Dialog open={fullResetOpen} onOpenChange={(o) => { if (!o) { setFullResetOpen(false); setFullResetConfirm("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="size-4" />
+              Full Reset?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete all operational data, customers, and the entire audit log.
+              Your shop will be returned to its initial setup state.{" "}
+              <strong className="text-foreground">This cannot be undone.</strong>
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="full-confirm">
+                Type <span className="font-semibold text-foreground">{shop?.name}</span> to confirm
+              </Label>
+              <Input
+                id="full-confirm"
+                value={fullResetConfirm}
+                onChange={(e) => setFullResetConfirm(e.target.value)}
+                placeholder={shop?.name ?? ""}
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setFullResetOpen(false); setFullResetConfirm("") }} disabled={fullResetLoading}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={fullResetConfirm !== shop?.name || fullResetLoading}
+                onClick={handleFullReset}
+              >
+                {fullResetLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Full Reset Now
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>
         <DialogContent>

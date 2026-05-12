@@ -38,6 +38,8 @@ export type AuditAction =
   | "CANCEL_STOCK_AUDIT"
   // ── Org / settings ─────────────────────────────────────────────────────────
   | "CREATE_BRANCH"
+  | "TRANSACTIONAL_RESET"
+  | "FULL_RESET"
 
 export interface LogAuditParams {
   shopId: string
